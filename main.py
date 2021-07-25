@@ -1,4 +1,5 @@
 import pymongo
+import chomoClient
 
 # Replace the uri string with your MongoDB deployment's connection string.
 conn_str = "mongodb://market:admin123@localhost:27017"
@@ -8,3 +9,5 @@ db = client["marketinfo"]
 c = db["btcusdt-1min"]
 item = c.find_one({"id":1626710400})
 print(item)
+
+chomoClient.client.PlaceOrder()
