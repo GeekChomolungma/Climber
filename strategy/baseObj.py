@@ -25,9 +25,9 @@ class baseObjSpot:
             print("baseObj Running...")
             i += 1
         
-    def Buy(self):
+    def Buy(self,amount):
         'Buy'
-        chomoClient.client.PlaceOrder("buy")
+        chomoClient.client.PlaceOrder(amount)
 
     def Sell(self):
         'Sell'

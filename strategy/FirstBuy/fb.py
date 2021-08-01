@@ -4,6 +4,7 @@ import strategy.baseObj
 import utils.ticker
 import numpy as np
 import pandas as pd
+import chomoClient.client
 
 
 class FirstBuyPoint(strategy.baseObj.baseObjSpot):
@@ -46,8 +47,11 @@ class FirstBuyPoint(strategy.baseObj.baseObjSpot):
             print(self.trainData)
 
             # try to calculate metrics
+            # and make order
             res, exist = self.calculate()
-            
+            if exist == True:
+                amount = self.getAccountBalance()
+                self.Buy(amount)
         else:
             print("continue...")
             
@@ -62,9 +66,15 @@ class FirstBuyPoint(strategy.baseObj.baseObjSpot):
         self.trainData = df
         print(df)
         
+    def getAccountBalance(self):
+        'get usdt balance'
+        balance = chomoClient.client.GetAccountBalance()
+        print(balance)
+        return balance
+
     def calculate(self):
         'calculate metrics'
-        # firstly, find max high spot
+        # firstly, find max high spot globally
         gIndex = self.trainData["high"][:-1].idxmax()
         gSpot = self.trainData.iloc[gIndex,:]
         if gIndex < len(self.trainData)/3:
@@ -83,6 +93,9 @@ class FirstBuyPoint(strategy.baseObj.baseObjSpot):
         rightMinSpot, rightMaxSpot = rightWindow[rightLowIndex,:],rightWindow[rightHigIndex,:]
         if (rightLowIndex - gIndex) < (len(self.trainData) - gIndex) * 3/4:
             # rightMinSpot is too close to gSpot, it's late
+            return NaN, False
+        elif rightMinSpot["low"] < leftMinSpot["low"]:
+            # tilt and decline right side
             return NaN, False
         
         return 1,True
