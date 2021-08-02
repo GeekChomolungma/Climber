@@ -53,12 +53,16 @@ class FirstBuyPoint(strategy.baseObj.baseObjSpot):
                 amount = self.getAccountBalance("usdt")
                 if float(amount) > 15.0:
                     self.Buy(amount)
-            
+                else:
+                    print("But not enought usdt, do not buy btc.")
+
             res, exist = self.calculateSellPoint()
             if exist == True:
                 amount = self.getAccountBalance("btc")
-                self.Sell(amount)
-
+                if float(amount) > 0.000001:
+                    self.Sell(amount)
+                else:
+                    print("But not enought btc, do not sell btc.")
 
         else:
             print("continue...")
@@ -92,20 +96,27 @@ class FirstBuyPoint(strategy.baseObj.baseObjSpot):
 
         # secondly, check left window
         leftWindow = self.trainData[:gIndex]
-        leftLowIndex, leftHigIndex = leftWindow["low"].idxmin(), leftWindow["high"].idxmin()
-        leftMinSpot, leftMaxSpot = leftWindow[leftLowIndex,:],leftWindow[leftHigIndex,:]
+        leftLowIndex, leftHigIndex = leftWindow["low"][:].idxmin(), leftWindow["high"][:].idxmin()
+        leftMinSpot, leftMaxSpot = leftWindow.loc[leftLowIndex,:],leftWindow.loc[leftHigIndex,:]
 
         # thirdly, check right window
         rightWindow = self.trainData[gIndex+1:-1]
-        rightLowIndex, rightHigIndex = rightWindow["low"].idxmin(), rightWindow["high"].idxmin()
-        rightMinSpot, rightMaxSpot = rightWindow[rightLowIndex,:],rightWindow[rightHigIndex,:]
+        if len(rightWindow) == 0:
+            # right window does not exist
+            print("calculateBuyPoint: right window does not exist, please wait for more candidate data. Continue...")
+            return NaN, False
+        rightLowIndex, rightHigIndex = rightWindow["low"][:].idxmin(), rightWindow["high"][:].idxmin()
+        rightMinSpot, rightMaxSpot = rightWindow.loc[rightLowIndex,:],rightWindow.loc[rightHigIndex,:]
         if (rightLowIndex - gIndex) < (len(self.trainData) - gIndex) * 3/4:
             # rightMinSpot is too close to gSpot, it's late
+            print("calculateBuyPoint: rightMinSpot is too close to gSpot, it's late. Continue...")
             return NaN, False
         elif rightMinSpot["low"] < leftMinSpot["low"]:
             # tilt and decline right side
+            print("calculateBuyPoint: tilt and decline right side. Continue...")
             return NaN, False
-        
+
+        print("Good!!! calculateBuyPoint: foud BuyPoint!!!")
         return 1,True
 
     def calculateSellPoint(self):
@@ -120,19 +131,27 @@ class FirstBuyPoint(strategy.baseObj.baseObjSpot):
 
         # secondly, check left window
         leftWindow = self.trainData[:gIndex]
-        leftLowIndex, leftHigIndex = leftWindow["low"].idxmax(), leftWindow["high"].idxmax()
-        leftMinSpot, leftMaxSpot = leftWindow[leftLowIndex,:],leftWindow[leftHigIndex,:]
+        leftLowIndex, leftHigIndex = leftWindow["low"][:].idxmax(), leftWindow["high"][:].idxmax()
+        leftMinSpot, leftMaxSpot = leftWindow.loc[leftLowIndex,:],leftWindow.loc[leftHigIndex,:]
 
         # thirdly, check right window
         rightWindow = self.trainData[gIndex+1:-1]
-        rightLowIndex, rightHigIndex = rightWindow["low"].idxmax(), rightWindow["high"].idxmax()
-        rightMinSpot, rightMaxSpot = rightWindow[rightLowIndex,:],rightWindow[rightHigIndex,:]
-        if (rightMaxSpot - gIndex) < (len(self.trainData) - gIndex) * 3/4:
+        if len(rightWindow) == 0:
+            # right window does not exist
+            print("calculateSellPoint: right window does not exist, please wait for more candidate data. Continue...")
+            return NaN, False
+
+        rightLowIndex, rightHigIndex = rightWindow["low"][:].idxmax(), rightWindow["high"][:].idxmax()
+        rightMinSpot, rightMaxSpot = rightWindow.loc[rightLowIndex,:],rightWindow.loc[rightHigIndex,:]
+        if (rightHigIndex - gIndex) < (len(self.trainData) - gIndex) * 3/4:
             # rightMaxSpot is too close to gSpot, it's late
+            print("calculateSellPoint: rightMaxSpot is too close to gSpot, it's late. Continue...")
             return NaN, False
         elif rightMaxSpot["high"] > leftMaxSpot["high"]:
             # tilt and decline left side
+            print("calculateSellPoint: tilt and decline left side. Continue...")
             return NaN, False
-        
+
+        print("Good!!! calculateSellPoint: foud SellPoint!!!")
         return 1,True
 
