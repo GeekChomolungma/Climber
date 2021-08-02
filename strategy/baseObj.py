@@ -27,8 +27,8 @@ class baseObjSpot:
         
     def Buy(self,amount):
         'Buy'
-        chomoClient.client.PlaceOrder(amount)
+        chomoClient.client.PlaceOrder(amount, "buy-market")
 
-    def Sell(self):
+    def Sell(self,amount):
         'Sell'
-        chomoClient.client.PlaceOrder("sell")
+        chomoClient.client.PlaceOrder(amount, "sell-market")

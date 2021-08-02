@@ -4,9 +4,9 @@ import json
 urlAccountBalance = 'http://127.0.0.1:8080/api/v1/account/accountbalance'
 urlOrder = 'http://127.0.0.1:8080/api/v1/order/placeorder'
 
-def PlaceOrder(amout):
+def PlaceOrder(amout, model):
     dict = {
-        "model": "buy-market",
+        "model": model,
         "amount": amout,
         "price": "100"
     }
@@ -18,9 +18,9 @@ def PlaceOrder(amout):
     response = requests.post(f'{urlOrder}', json=data)
     print(response.text)
 
-def GetAccountBalance():
+def GetAccountBalance(currency):
     dict = {
-        "currency": "usdt",
+        "currency": currency,
     }
     body = json.dumps(dict)
     data = {

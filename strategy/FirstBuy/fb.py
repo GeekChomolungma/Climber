@@ -48,10 +48,18 @@ class FirstBuyPoint(strategy.baseObj.baseObjSpot):
 
             # try to calculate metrics
             # and make order
-            res, exist = self.calculate()
+            res, exist = self.calculateBuyPoint()
             if exist == True:
-                amount = self.getAccountBalance()
-                self.Buy(amount)
+                amount = self.getAccountBalance("usdt")
+                if float(amount) > 15.0:
+                    self.Buy(amount)
+            
+            res, exist = self.calculateSellPoint()
+            if exist == True:
+                amount = self.getAccountBalance("btc")
+                self.Sell(amount)
+
+
         else:
             print("continue...")
             
@@ -66,13 +74,13 @@ class FirstBuyPoint(strategy.baseObj.baseObjSpot):
         self.trainData = df
         print(df)
         
-    def getAccountBalance(self):
-        'get usdt balance'
-        balance = chomoClient.client.GetAccountBalance()
-        print(balance)
+    def getAccountBalance(self, currency):
+        'get currency balance'
+        balance = chomoClient.client.GetAccountBalance(currency)
+        print("the currency: ", currency, "amount: ", balance)
         return balance
 
-    def calculate(self):
+    def calculateBuyPoint(self):
         'calculate metrics'
         # firstly, find max high spot globally
         gIndex = self.trainData["high"][:-1].idxmax()
@@ -80,7 +88,35 @@ class FirstBuyPoint(strategy.baseObj.baseObjSpot):
         if gIndex < len(self.trainData)/3:
             # left window is too short, it's late
             return NaN, False
-        print("Train Data length is",len(self.trainData["high"][:-1]),"Max high price is: ", gSpot["high"], "timestamp: ", gSpot["id"])
+        print("BuyPoint Train Data length is",len(self.trainData["high"][:-1]),"Max high price is: ", gSpot["high"], "timestamp: ", gSpot["id"])
+
+        # secondly, check left window
+        leftWindow = self.trainData[:gIndex]
+        leftLowIndex, leftHigIndex = leftWindow["low"].idxmin(), leftWindow["high"].idxmin()
+        leftMinSpot, leftMaxSpot = leftWindow[leftLowIndex,:],leftWindow[leftHigIndex,:]
+
+        # thirdly, check right window
+        rightWindow = self.trainData[gIndex+1:-1]
+        rightLowIndex, rightHigIndex = rightWindow["low"].idxmin(), rightWindow["high"].idxmin()
+        rightMinSpot, rightMaxSpot = rightWindow[rightLowIndex,:],rightWindow[rightHigIndex,:]
+        if (rightLowIndex - gIndex) < (len(self.trainData) - gIndex) * 3/4:
+            # rightMinSpot is too close to gSpot, it's late
+            return NaN, False
+        elif rightMinSpot["low"] < leftMinSpot["low"]:
+            # tilt and decline right side
+            return NaN, False
+        
+        return 1,True
+
+    def calculateSellPoint(self):
+        'calculate metrics'
+        # firstly, find max high spot globally
+        gIndex = self.trainData["low"][:-1].idxmin()
+        gSpot = self.trainData.iloc[gIndex,:]
+        if gIndex < len(self.trainData)/3:
+            # left window is too short, it's late
+            return NaN, False
+        print("SellPoint Train Data length is",len(self.trainData["low"][:-1]),"Min low price is: ", gSpot["low"], "timestamp: ", gSpot["id"])
 
         # secondly, check left window
         leftWindow = self.trainData[:gIndex]
@@ -91,11 +127,12 @@ class FirstBuyPoint(strategy.baseObj.baseObjSpot):
         rightWindow = self.trainData[gIndex+1:-1]
         rightLowIndex, rightHigIndex = rightWindow["low"].idxmax(), rightWindow["high"].idxmax()
         rightMinSpot, rightMaxSpot = rightWindow[rightLowIndex,:],rightWindow[rightHigIndex,:]
-        if (rightLowIndex - gIndex) < (len(self.trainData) - gIndex) * 3/4:
-            # rightMinSpot is too close to gSpot, it's late
+        if (rightMaxSpot - gIndex) < (len(self.trainData) - gIndex) * 3/4:
+            # rightMaxSpot is too close to gSpot, it's late
             return NaN, False
-        elif rightMinSpot["low"] < leftMinSpot["low"]:
-            # tilt and decline right side
+        elif rightMaxSpot["high"] > leftMaxSpot["high"]:
+            # tilt and decline left side
             return NaN, False
         
         return 1,True
+
