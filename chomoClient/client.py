@@ -4,12 +4,15 @@ import json
 urlAccountBalance = 'http://127.0.0.1:8080/api/v1/account/accountbalance'
 urlOrder = 'http://127.0.0.1:8080/api/v1/order/placeorder'
 
-def PlaceOrder(amout, model):
+def PlaceOrder(symbol, model, amout, price, source):
     dict = {
+        "symbol":symbol,
         "model": model,
         "amount": amout,
-        "price": "100"
+        "price": price,
+        "source":source
     }
+
     body = json.dumps(dict)
     data = {
         'aimsite': 'HuoBi',
