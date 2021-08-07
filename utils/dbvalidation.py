@@ -18,7 +18,7 @@ for item in iter:
     curTime = item["id"]
     try:
         nextTime = iterCopy.next()["id"]
-        print("from", curTime,"to:",nextTime)
+        #print("from", curTime,"to:",nextTime)
         if curTime + 60 != nextTime:
             print("this interval is not 60")
             print("from", curTime,"to:",nextTime)

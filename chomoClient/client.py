@@ -2,7 +2,9 @@ import requests
 import json
 
 urlAccountBalance = 'http://127.0.0.1:8080/api/v1/account/accountbalance'
-urlOrder = 'http://127.0.0.1:8080/api/v1/order/placeorder'
+urlPlaceOrder = 'http://127.0.0.1:8080/api/v1/order/placeorder'
+urlCancelOrder = 'http://127.0.0.1:8080/api/v1/order/cancelorder'
+urlGetOrder = 'http://127.0.0.1:8080/api/v1/order/getorder'
 
 def PlaceOrder(symbol, model, amout, price, source):
     dict = {
@@ -18,7 +20,33 @@ def PlaceOrder(symbol, model, amout, price, source):
         'aimsite': 'HuoBi',
         'body': body
     }
-    response = requests.post(f'{urlOrder}', json=data)
+    response = requests.post(f'{urlPlaceOrder}', json=data)
+    print(response.text)
+
+def CancelOrder(orderID):
+    dict = {
+        "orderid":orderID
+    }
+
+    body = json.dumps(dict)
+    data = {
+        'aimsite': 'HuoBi',
+        'body': body
+    }
+    response = requests.post(f'{urlCancelOrder}', json=data)
+    print(response.text)
+
+def GetOrder(orderID):
+    dict = {
+        "orderid":orderID
+    }
+
+    body = json.dumps(dict)
+    data = {
+        'aimsite': 'HuoBi',
+        'body': body
+    }
+    response = requests.post(f'{urlGetOrder}', json=data)
     print(response.text)
 
 def GetAccountBalance(currency):
