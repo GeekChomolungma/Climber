@@ -18,6 +18,7 @@ def PlaceOrder(symbol, model, amout, price, source):
     body = json.dumps(dict)
     data = {
         'aimsite': 'HuoBi',
+        "accountid":"3667382",
         'body': body
     }
     response = requests.post(f'{urlPlaceOrder}', json=data)
@@ -31,6 +32,7 @@ def CancelOrder(orderID):
     body = json.dumps(dict)
     data = {
         'aimsite': 'HuoBi',
+        "accountid":"3667382",
         'body': body
     }
     response = requests.post(f'{urlCancelOrder}', json=data)
@@ -44,6 +46,7 @@ def GetOrder(orderID):
     body = json.dumps(dict)
     data = {
         'aimsite': 'HuoBi',
+        "accountid":"3667382",
         'body': body
     }
     response = requests.post(f'{urlGetOrder}', json=data)
@@ -56,6 +59,7 @@ def GetAccountBalance(currency):
     body = json.dumps(dict)
     data = {
         'aimsite': 'HuoBi',
+        "accountid":"3667382",
         'body':body
     }
     response = requests.post(f'{urlAccountBalance}', json=data)
