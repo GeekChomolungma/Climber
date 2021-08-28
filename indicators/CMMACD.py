@@ -20,6 +20,6 @@ def CmIndicator(data):
         print("sell point: time:", times[len(times)-1])
         return "buy",times[len(times)-1]
     
-    return "nothing"
+    return "nothing",0
 
 
