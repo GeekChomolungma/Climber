@@ -15,10 +15,10 @@ def CmIndicator(data):
     if crossIndexSell[-1] == (len(data)-1):
         # the last index in data
         print("sell point: time:", times[len(times)-1])
-        return "sell"
+        return "sell",times[len(times)-1]
     elif crossIndexBuy[-1] == (len(data)-1):
         print("sell point: time:", times[len(times)-1])
-        return "buy"
+        return "buy",times[len(times)-1]
     
     return "nothing"
 

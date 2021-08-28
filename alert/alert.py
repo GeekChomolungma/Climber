@@ -43,8 +43,8 @@ def sendText(chatrooms,text):
         zhanTie()
         huiche()
 
-for i in range(20):
-    sendText(['我还能再睡一会'],'哈哈哈')
+def Alert(text):
+    sendText(['险峰创世'],text)
 
 #方法2，直接发消息，不需要复制粘贴
 #handle = win32gui.FindWindow(None, '劳模')

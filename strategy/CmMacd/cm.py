@@ -3,12 +3,10 @@ sys.path.append('..')
 from indicators import CMMACD
 import strategy.baseObj
 import utils.ticker
-import numpy as np
-import pandas as pd
 import pymongo
 import chomoClient.client
-
-
+from alert import alert
+import datetime
 
 class CmMacd30Min(strategy.baseObj.baseObjSpot):
     def LoadDB(self, db, collection):
@@ -17,21 +15,32 @@ class CmMacd30Min(strategy.baseObj.baseObjSpot):
         self.Collection = self.DB[collection]
 
     def Run(self,period,windowLen):
+        self.timeID = 0
         while True:
             t = utils.ticker.Ticker(period)
             t.Loop()
-            print("history data loaded...")
             data = []
             DBcursor = self.Collection.find().sort('id', pymongo.DESCENDING).limit(windowLen)
             for doc in DBcursor:
                 data.append(doc)
             data.reverse()
-            indicator = CMMACD.CmIndicator(data)
-            print("indicator: ", indicator)
-            if indicator == "buy":
+            indicator,timeID = CMMACD.CmIndicator(data)
+            if indicator == "buy" and self.timeID != timeID:
+                timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                print("HuoBi BTC-30min: 要涨了!!! 现在买入! ", timeNow)
                 self.Buy()
-            elif indicator == "sell":
+                self.timeID = timeID
+                for i in range(3):
+                    text = "HuoBi BTC-30min: 要涨了!!! 现在买入! 当前时间: %s, 报警提醒次数(%d/3)" %(timeNow,i+1)
+                    alert.Alert(text)
+            elif indicator == "sell" and self.timeID != timeID:
+                timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                print("HuoBi BTC-30min: 要跌了!!! 赶紧卖掉! ", timeNow)
                 self.Sell()
+                self.timeID = timeID
+                for i in range(3):
+                    text = "HuoBi BTC-30min: 要跌了!!! 赶紧卖掉! 当前时间: %s, 报警提醒次数(%d/3)" %(timeNow,i+1)
+                    alert.Alert(text)
 
     def getAccountBalance(self, currency):
         'get currency balance'
