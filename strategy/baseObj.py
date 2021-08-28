@@ -24,7 +24,6 @@ class baseObjSpot:
             t.Loop()
             print("baseObj Running...")
             i += 1
-        
     def Buy(self,amount):
         'Buy'
         chomoClient.client.PlaceOrder("btcusdt", "buy-market", amount, "100", "spot-api")
