@@ -13,13 +13,9 @@ def CmIndicator(data):
     signal = builtIndicators.ma.SMA(MACD,9)
     crossIndexSell, crossIndexBuy= builtIndicators.cross.cross(MACD,signal)
     if crossIndexSell[-1] == (len(data)-1):
-        # the last index in data
-        print("sell point: time:", times[len(times)-1])
         return "sell",times[len(times)-1]
     elif crossIndexBuy[-1] == (len(data)-1):
-        print("sell point: time:", times[len(times)-1])
         return "buy",times[len(times)-1]
-    
     return "nothing",0
 
 

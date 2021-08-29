@@ -12,35 +12,48 @@ class CmMacd30Min(strategy.baseObj.baseObjSpot):
     def LoadDB(self, db, collection):
         'choose the db collection'
         self.DB = self.MgoClient[db]
-        self.Collection = self.DB[collection]
+        #self.Collection = self.DB[collection]
 
-    def Run(self,period,windowLen):
-        self.timeID = 0
+    def Run(self,tickTime,windowLen,symbols):
+        self.timeIDList = [0]*len(symbols)
         while True:
-            t = utils.ticker.Ticker(period)
+            t = utils.ticker.Ticker(tickTime)
             t.Loop()
-            data = []
-            DBcursor = self.Collection.find().sort('id', pymongo.DESCENDING).limit(windowLen)
-            for doc in DBcursor:
-                data.append(doc)
-            data.reverse()
-            indicator,timeID = CMMACD.CmIndicator(data)
-            if indicator == "buy" and self.timeID != timeID:
+            for idx in range(len(symbols)):
+                collection = "HB-%s-30min"%(symbols[idx])
+                self.Collection = self.DB[collection]
+                data = []
+                DBcursor = self.Collection.find().sort('id', pymongo.DESCENDING).limit(windowLen)
+                for doc in DBcursor:
+                    data.append(doc)
+                data.reverse()
+                indicator,timeID = CMMACD.CmIndicator(data)
                 timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                print("HuoBi BTC-30min: 要涨了!!! 现在买入! ", timeNow)
-                self.Buy()
-                self.timeID = timeID
-                for i in range(3):
-                    text = "HuoBi BTC-30min: 要涨了!!! 现在买入! 当前时间: %s, 报警提醒次数(%d/3)" %(timeNow,i+1)
-                    alert.Alert(text)
-            elif indicator == "sell" and self.timeID != timeID:
-                timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                print("HuoBi BTC-30min: 要跌了!!! 赶紧卖掉! ", timeNow)
-                self.Sell()
-                self.timeID = timeID
-                for i in range(3):
-                    text = "HuoBi BTC-30min: 要跌了!!! 赶紧卖掉! 当前时间: %s, 报警提醒次数(%d/3)" %(timeNow,i+1)
-                    alert.Alert(text)
+                outStr = "symbol: %s, indicator: %s, time: %s" %(symbols[idx],indicator,timeNow)
+                f = open('out.log','a+')
+                print(outStr,file = f)
+                if indicator == "buy" and self.timeIDList[idx] != timeID:
+                    timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    alertText = "HuoBi %s: 要涨了!!! 现在买入! 时间: %s"%(collection,timeNow)
+                    print(alertText,file=f)
+                    if symbols[idx] == "btcusdt":
+                        self.Buy()
+                    self.timeIDList[idx] = timeID
+                    for i in range(2):
+                        text = "HuoBi %s-30min: 要涨了!!! 现在买入! 当前时间: %s, 报警提醒次数(%d/2)" %(symbols[idx],timeNow,i+1)
+                        alert.Alert(text)
+                elif indicator == "sell" and self.timeIDList[idx] != timeID:
+                    timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    alertText = "HuoBi %s: 要跌了!!! 赶紧卖掉! 时间: %s"%(collection,timeNow)
+                    print(alertText,file=f)
+                    #print("HuoBi %s: 要跌了!!! 赶紧卖掉! 时间: %s"%(collection,timeNow))
+                    if symbols[idx] == "btcusdt":
+                        self.Sell()
+                    self.timeIDList[idx] = timeID
+                    for i in range(2):
+                        text = "HuoBi %s-30min: 要跌了!!! 赶紧卖掉! 当前时间: %s, 报警提醒次数(%d/2)" %(symbols[idx],timeNow,i+1)
+                        alert.Alert(text)
+                f.close()
 
     def getAccountBalance(self, currency):
         'get currency balance'
