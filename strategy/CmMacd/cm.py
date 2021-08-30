@@ -46,14 +46,14 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                 data.reverse()
                 indicator,timeID,clPrice = CMMACD.CmIndicator(data)
                 timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                outStr = "symbol: %s, indicator: %s, time: %s" %(symbols[idx],indicator,timeNow)
+                outStr = "symbol: %s, indicator: %s, has balance: %r, has amount: %r, timeID: %d, timeNow: %s" %(symbols[idx],indicator,self.Wallet[idx], self.Amounts[idx], timeID, timeNow)
                 f = open('out.log','a+')
                 print(outStr,file = f)
                 if indicator == "buy" and self.timeIDList[idx] != timeID and self.Wallet[idx]:
                     # record the tradePriceList
                     self.tradePriceList[idx] = clPrice
                     timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    alertText = "HuoBi %s: 要涨了!!! 现在买入! 时间: %s"%(collection,timeNow)
+                    alertText = "HuoBi %s: will rise!!! buy now! time: %s"%(collection,timeNow)
                     print(alertText,file=f)
                     if symbols[idx] == "btcusdt":
                         self.Buy()
@@ -67,7 +67,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                     self.tradePriceList[idx] = clPrice
                     # 4 conditions: sell, not same id, have amount, and not descending
                     timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    alertText = "HuoBi %s: 要跌了!!! 赶紧卖掉! 时间: %s"%(collection,timeNow)
+                    alertText = "HuoBi %s: will descend!!! sell quickly! time: %s"%(collection,timeNow)
                     print(alertText,file=f)
                     if symbols[idx] == "btcusdt":
                         self.Sell()
