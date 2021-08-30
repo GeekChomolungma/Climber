@@ -1,6 +1,7 @@
 from os import close
 import sys
 sys.path.append('..')
+import builtIndicators
 from indicators import CMMACD
 import strategy.baseObj
 import utils.ticker
@@ -9,6 +10,7 @@ import chomoClient.client
 from alert import alert
 import datetime
 import pandas as pd
+import matplotlib.pyplot as plt
 
 class CmMacd(strategy.baseObj.baseObjSpot):
     def LoadDB(self, db):
@@ -50,6 +52,9 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                 f = open('out.log','a+')
                 print(outStr,file = f)
                 if indicator == "buy" and self.timeIDList[idx] != timeID and self.Wallet[idx]:
+                    # need: 1. if self.tradePriceList[idx] > clPrice 
+                    #       2. if macd cross down ZERO, means selling power released?
+                    #       3. if macd cross down alot but not cross ZERO, means buying power is huge?
                     # record the tradePriceList
                     self.tradePriceList[idx] = clPrice
                     timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -64,6 +69,8 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                         text = "HuoBi %s-%s: 要涨了!!! 现在买入! 当前时间: %s, 报警提醒次数(%d/2)" %(symbols[idx],period,timeNow,i+1)
                         alert.Alert(text)
                 elif indicator == "sell" and self.timeIDList[idx] != timeID and self.Amounts[idx] and self.tradePriceList[idx] < clPrice:
+                    # need: 1. if macd cross up ZERO, means buying power released?
+                    #       2. if macd cross up alot but not cross ZERO, means selling power is huge?
                     self.tradePriceList[idx] = clPrice
                     # 4 conditions: sell, not same id, have amount, and not descending
                     timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -106,14 +113,60 @@ class CmMacd(strategy.baseObj.baseObjSpot):
         amount = 0.0
         RateOfReturn = 0.0
         TradePrice = 0.0
-        collection = "HB-%s-5min"%(symbol)
+        collection = "HB-%s-30min"%(symbol)
         self.Collection = self.DB[collection]
         tCount = self.Collection.find().sort('id', pymongo.ASCENDING).count()
         data = []
         DBcursor = self.Collection.find().sort('id', pymongo.ASCENDING).limit(windowLen)
         for doc in DBcursor:
             data.append(doc)
+            
+        # query all data for plot
+        dataAll = []
+        timeAll = []
+        closeAll = []
+        dataBPA = []
+        dataSPA = []
+        timeBPA = []
+        timeSPA = []
+        dataBP = []
+        dataSP = []
+        timeBP = []
+        timeSP = []
+        DBcursorAll = self.Collection.find().sort('id', pymongo.ASCENDING)
+        for docAll in DBcursorAll:
+            dataAll.append(docAll)
+            df = pd.DataFrame(dataAll)
+            timeAll = df["id"]
+            closeAll = df["close"]
 
+        # init step
+        indicator,timeID,closePrice = CMMACD.CmIndicator(data)
+        if indicator == "buy":
+            dataBPA.append(closePrice)
+            timeBPA.append(timeID)
+            if Money > 0:
+                amount = Money / closePrice
+                Money = 0
+                TradePrice = closePrice
+                dataBP.append(closePrice)
+                timeBP.append(timeID)
+                print("buy point found,  ts: %d, close: %f, amount: %f,    round: %d/%d"%(timeID, closePrice,amount, i+1, tCount-windowLen))
+        elif indicator == "sell":
+            dataSPA.append(closePrice)
+            timeSPA.append(timeID)
+            if amount > 0 and (closePrice - TradePrice) / TradePrice > 0.01:
+                if TradePrice == 0:
+                    print("first point is sell, do nothing")
+                else:
+                    Money = amount * closePrice
+                    amount = 0
+                    TradePrice = closePrice
+                    dataSP.append(closePrice)
+                    timeSP.append(timeID)
+                    print("sell point found, ts: %d, close: %f, Money:  %f, round: %d/%d"%(timeID, closePrice,Money,i+1, tCount-windowLen))
+
+        # loop
         for i in range(tCount-windowLen):
             DBcursor = self.Collection.find().sort('id', pymongo.ASCENDING).skip(i+windowLen).limit(1)
             for doc in DBcursor:
@@ -121,22 +174,62 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                 data.append(doc)
                 
             indicator,timeID,closePrice = CMMACD.CmIndicator(data)
-            if indicator == "buy" and Money > 0:
-                amount = Money / closePrice
-                Money = 0
-                TradePrice = closePrice
-                print("buy point found,  ts: %d, close: %f, amount: %f,    round: %d/%d"%(timeID, closePrice,amount, i+1, tCount-windowLen))
-            elif indicator == "sell" and amount > 0 and (closePrice - TradePrice) / TradePrice > 0.01:
-                # #M1
-                if TradePrice == 0:
-                    print("first point is sell, do nothing")
-                else:
-                    Money = amount * closePrice
-                    amount = 0
+            if indicator == "buy":
+                dataBPA.append(closePrice)
+                timeBPA.append(timeID)
+                if Money > 0:
+                    amount = Money / closePrice
+                    Money = 0
                     TradePrice = closePrice
-                    print("sell point found, ts: %d, close: %f, Money:  %f, round: %d/%d"%(timeID, closePrice,Money,i+1, tCount-windowLen))
+                    dataBP.append(closePrice)
+                    timeBP.append(timeID)
+                    print("buy point found,  ts: %d, close: %f, amount: %f,    round: %d/%d"%(timeID, closePrice,amount, i+1, tCount-windowLen))
+            elif indicator == "sell":
+                dataSPA.append(closePrice)
+                timeSPA.append(timeID)
+                if amount > 0 and (closePrice - TradePrice) / TradePrice > 0.01:
+                    if TradePrice == 0:
+                        print("first point is sell, do nothing")
+                    else:
+                        Money = amount * closePrice
+                        amount = 0
+                        TradePrice = closePrice
+                        dataSP.append(closePrice)
+                        timeSP.append(timeID)
+                        print("sell point found, ts: %d, close: %f, Money:  %f, round: %d/%d"%(timeID, closePrice,Money,i+1, tCount-windowLen))
         if Money == 0:
             RateOfReturn = TradePrice * amount / 10000.0 - 1.0
         elif amount == 0:
             RateOfReturn = Money / 10000.0 - 1.0
         print("Rate of Return in %s is %f"%(symbol, RateOfReturn))
+
+        fastMA = builtIndicators.ma.EMA(closeAll,12)
+        slowMA = builtIndicators.ma.EMA(closeAll,26)
+        MACD = fastMA - slowMA
+        signal = builtIndicators.ma.SMA(MACD,9)
+        hist = MACD - signal
+        crossIndexSell, crossIndexBuy= builtIndicators.cross.cross(MACD,signal)
+        crossTimesSell = [timeAll[ci] for ci in crossIndexSell]
+        crossSell = [signal[ci] for ci in crossIndexSell]
+        crossTimesBuy = [timeAll[ci] for ci in crossIndexBuy]
+        crossBuy = [signal[ci] for ci in crossIndexBuy]
+
+        f, (ax1, ax2, ax3) = plt.subplots(3,1,sharex=True,figsize=(8,12))
+        #plt.subplot(211)
+        ax1.plot(timeAll, closeAll, color='gray', label="close")
+        ax1.scatter(timeBPA,dataBPA,marker='v',c='g',edgecolors='g')
+        ax1.scatter(timeSPA,dataSPA,marker='^',c='r',edgecolors='r')
+
+        ax2.plot(timeAll, closeAll, color='gray', label="close")
+        ax2.scatter(timeBP,dataBP,marker='o',c='w',edgecolors='g')
+        ax2.scatter(timeSP,dataSP,marker='o',c='m',edgecolors='m')
+
+        #plt.subplot(212)
+        ax3.plot(timeAll, MACD, label="MACD")
+        ax3.plot(timeAll, signal, label="signal")
+        ax3.scatter(crossTimesSell,crossSell,marker='o',c='r',edgecolors='r')
+        ax3.scatter(crossTimesBuy,crossBuy,marker='o',c='g',edgecolors='g')
+        ax3.bar(timeAll,hist,width=600,label="hist")
+
+        #plt.legend()
+        plt.show()
