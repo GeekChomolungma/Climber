@@ -20,14 +20,18 @@ class CmMacd(strategy.baseObj.baseObjSpot):
         # if >15$, then we are buyer.
         amount = self.getAccountBalance("usdt")
         if float(amount) > 15.0:
-            self.haveMoney = True
-            self.haveAmount = False
+            # self.haveMoney = True
+            # self.haveAmount = False
+            self.Wallet = [True]*len(symbols)
+            self.Amounts = [False]*len(symbols)
         else:
-            self.haveMoney = False
-            self.haveAmount = True
-        self.tradePrice = 0
+            # self.haveMoney = False
+            # self.haveAmount = True
+            self.Wallet = [True]*len(symbols)
+            self.Amounts = [False]*len(symbols)
 
         # 2nd lets go trade
+        self.tradePriceList = [0]*len(symbols)
         self.timeIDList = [0]*len(symbols)
         while True:
             t = utils.ticker.Ticker(tickTime)
@@ -45,30 +49,30 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                 outStr = "symbol: %s, indicator: %s, time: %s" %(symbols[idx],indicator,timeNow)
                 f = open('out.log','a+')
                 print(outStr,file = f)
-                if indicator == "buy" and self.timeIDList[idx] != timeID and self.haveMoney:
-                    # record the tradePrice
-                    self.tradePrice = clPrice
+                if indicator == "buy" and self.timeIDList[idx] != timeID and self.Wallet[idx]:
+                    # record the tradePriceList
+                    self.tradePriceList[idx] = clPrice
                     timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     alertText = "HuoBi %s: 要涨了!!! 现在买入! 时间: %s"%(collection,timeNow)
                     print(alertText,file=f)
                     if symbols[idx] == "btcusdt":
                         self.Buy()
-                    self.haveMoney = False
-                    self.haveAmount = True
+                    self.Wallet[idx] = False
+                    self.Amounts[idx] = True
                     self.timeIDList[idx] = timeID
                     for i in range(2):
                         text = "HuoBi %s-%s: 要涨了!!! 现在买入! 当前时间: %s, 报警提醒次数(%d/2)" %(symbols[idx],period,timeNow,i+1)
                         alert.Alert(text)
-                elif indicator == "sell" and self.timeIDList[idx] != timeID and self.haveAmount and self.tradePrice < clPrice:
-                    self.tradePrice = clPrice
+                elif indicator == "sell" and self.timeIDList[idx] != timeID and self.Amounts[idx] and self.tradePrice < clPrice:
+                    self.tradePriceList[idx] = clPrice
                     # 4 conditions: sell, not same id, have amount, and not descending
                     timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     alertText = "HuoBi %s: 要跌了!!! 赶紧卖掉! 时间: %s"%(collection,timeNow)
                     print(alertText,file=f)
                     if symbols[idx] == "btcusdt":
                         self.Sell()
-                    self.haveMoney = True
-                    self.haveAmount = False
+                    self.Wallet[idx] = True
+                    self.Amounts[idx] = False
                     self.timeIDList[idx] = timeID
                     for i in range(2):
                         text = "HuoBi %s-%s: 要跌了!!! 赶紧卖掉! 当前时间: %s, 报警提醒次数(%d/2)" %(symbols[idx],period,timeNow,i+1)
@@ -122,38 +126,15 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                 Money = 0
                 TradePrice = closePrice
                 print("buy point found,  ts: %d, close: %f, amount: %f,    round: %d/%d"%(timeID, closePrice,amount, i+1, tCount-windowLen))
-            elif indicator == "sell" and amount > 0:
+            elif indicator == "sell" and amount > 0 and (closePrice - TradePrice) / TradePrice > 0.01:
                 # #M1
-                if TradePrice >= closePrice:
-                    # DESCENDING         
-                    continue
+                if TradePrice == 0:
+                    print("first point is sell, do nothing")
                 else:
-                    if TradePrice == 0:
-                        print("first point is sell, do nothing")
-                    else:
-                        Money = amount * closePrice
-                        amount = 0
-                        TradePrice = closePrice
-                        print("sell point found, ts: %d, close: %f, Money:  %f, round: %d/%d"%(timeID, closePrice,Money,i+1, tCount-windowLen))
-                # #M2
-                # if abs((TradePrice - closePrice) / TradePrice) < 0.01:
-                #     continue
-                # else:
-                #     if TradePrice == 0:
-                #         print("first point is sell, do nothing")
-                #     else:
-                #         Money = amount * closePrice
-                #         amount = 0
-                #         TradePrice = closePrice
-                #         print("sell point found, ts: %d, close: %f, Money:  %f, round: %d/%d"%(timeID, closePrice,Money,i+1, tCount-windowLen))
-            # #M3
-            # else:
-            #     if TradePrice > 0 and (closePrice - TradePrice) / TradePrice > 0.03 and amount > 0:
-            #         #or (TradePrice - closePrice) / TradePrice > 0.02
-            #         Money = amount * closePrice
-            #         amount = 0
-            #         TradePrice = closePrice
-            #         print("sell over 0.04 return, ts: %d, close: %f, Money:  %f, round: %d/%d"%(timeID, closePrice,Money,i+1, tCount-windowLen))
+                    Money = amount * closePrice
+                    amount = 0
+                    TradePrice = closePrice
+                    print("sell point found, ts: %d, close: %f, Money:  %f, round: %d/%d"%(timeID, closePrice,Money,i+1, tCount-windowLen))
         if Money == 0:
             RateOfReturn = TradePrice * amount / 10000.0 - 1.0
         elif amount == 0:
