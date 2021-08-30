@@ -63,7 +63,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                     for i in range(2):
                         text = "HuoBi %s-%s: 要涨了!!! 现在买入! 当前时间: %s, 报警提醒次数(%d/2)" %(symbols[idx],period,timeNow,i+1)
                         alert.Alert(text)
-                elif indicator == "sell" and self.timeIDList[idx] != timeID and self.Amounts[idx] and self.tradePrice < clPrice:
+                elif indicator == "sell" and self.timeIDList[idx] != timeID and self.Amounts[idx] and self.tradePriceList[idx] < clPrice:
                     self.tradePriceList[idx] = clPrice
                     # 4 conditions: sell, not same id, have amount, and not descending
                     timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
