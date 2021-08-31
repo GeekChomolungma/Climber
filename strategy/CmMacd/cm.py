@@ -28,8 +28,8 @@ class CmMacd(strategy.baseObj.baseObjSpot):
             self.Wallet = [True]*len(symbols)
             self.Amounts = [False]*len(symbols)
         else:
-            self.Wallet = [True]*len(symbols)
-            self.Amounts = [False]*len(symbols)
+            self.Wallet = [False]*len(symbols)
+            self.Amounts = [True]*len(symbols)
 
         # 2nd lets go trade
         self.tradePriceList = [0]*len(symbols)
@@ -91,8 +91,8 @@ class CmMacd(strategy.baseObj.baseObjSpot):
             self.Wallet = [True]*len(symbols)
             self.Amounts = [False]*len(symbols)
         else:
-            self.Wallet = [True]*len(symbols)
-            self.Amounts = [False]*len(symbols)
+            self.Wallet = [False]*len(symbols)
+            self.Amounts = [True]*len(symbols)
         gMacdBPList = [0]*len(symbols)
         gMacdSPList = [0]*len(symbols)
         BPLockList = [False]*len(symbols)
