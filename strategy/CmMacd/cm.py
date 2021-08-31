@@ -88,15 +88,13 @@ class CmMacd(strategy.baseObj.baseObjSpot):
     def RunV2(self,tickTime,windowLen,symbols,period="5min"):
         amount = self.getAccountBalance("usdt")
         if float(amount) > 15.0:
-            self.Wallet = [True]*len(symbols)
-            self.Amounts = [False]*len(symbols)
+            BPLockList = [False]*len(symbols)
+            SPLockList = [True]*len(symbols)
         else:
-            self.Wallet = [False]*len(symbols)
-            self.Amounts = [True]*len(symbols)
+            BPLockList = [True]*len(symbols)
+            SPLockList = [False]*len(symbols)
         gMacdBPList = [0]*len(symbols)
-        gMacdSPList = [0]*len(symbols)
-        BPLockList = [False]*len(symbols)
-        SPLockList = [False]*len(symbols)
+        gMacdSPList = [99999999]*len(symbols)
         self.tradePriceList = [0]*len(symbols)
         self.timeIDList = [0]*len(symbols)
         while True:
@@ -112,10 +110,10 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                 data.reverse()
                 indicator,timeID,clPrice,lastMacd,lastSlowMA,stdMA = CMMACD.CmIndicator(data)
                 timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                outStr = "symbol: %s, indicator: %s, has balance: %r, has amount: %r, timeID: %d, timeNow: %s" %(symbols[idx],indicator,self.Wallet[idx], self.Amounts[idx], timeID, timeNow)
+                outStr = "symbol: %s, indicator: %s, has balance: %r, has amount: %r, timeID: %d, timeNow: %s" %(symbols[idx], indicator, not BPLockList[idx], not SPLockList[idx], timeID, timeNow)
                 f = open('out.log','a+')
                 print(outStr,file = f)
-                if indicator == "buy" and self.timeIDList[idx] != timeID and self.Wallet[idx]:
+                if indicator == "buy" and self.timeIDList[idx] != timeID:
                     if not BPLockList[idx] and (gMacdSPList[idx]-lastMacd)/lastSlowMA > stdMA:
                         BPLockList[idx] = True
                         SPLockList[idx] = False
@@ -126,15 +124,13 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                         print(alertText,file=f)
                         if symbols[idx] == "btcusdt":
                             self.Buy()
-                        self.Wallet[idx] = False
-                        self.Amounts[idx] = True
                         self.timeIDList[idx] = timeID
                         for i in range(2):
                             text = "HuoBi %s-%s: 要涨了!!! 现在买入! 当前时间: %s, 报警提醒次数(%d/2)" %(symbols[idx],period,timeNow,i+1)
                             alert.Alert(text)
                     elif lastMacd < gMacdBPList[idx]:
                         gMacdBPList[idx] = lastMacd
-                elif indicator == "sell" and self.timeIDList[idx] != timeID and self.Amounts[idx]:
+                elif indicator == "sell" and self.timeIDList[idx] != timeID:
                     if not SPLockList[idx] and (lastMacd-gMacdBPList[idx])/lastSlowMA > stdMA:
                         SPLockList[idx] = True
                         BPLockList[idx] = False
@@ -145,8 +141,6 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                         print(alertText,file=f)
                         if symbols[idx] == "btcusdt":
                             self.Sell()
-                        self.Wallet[idx] = True
-                        self.Amounts[idx] = False
                         self.timeIDList[idx] = timeID
                         for i in range(2):
                             text = "HuoBi %s-%s: 要跌了!!! 赶紧卖掉! 当前时间: %s, 报警提醒次数(%d/2)" %(symbols[idx],period,timeNow,i+1)
@@ -228,46 +222,42 @@ class CmMacd(strategy.baseObj.baseObjSpot):
             if indicator == "buy":
                 dataBPA.append(closePrice)
                 timeBPA.append(timeID)
-                overBuy = False
                 if not BPMAUsed and (gMacdSP-lastMacd)/lastSlowMA > stdMA:
                     BPMAUsed = True
                     SPMAUsed = False
                     gMacdBP = lastMacd
                     timeBuyForMa.append(timeID)
                     dataBuyForMa.append(closePrice)
-                    overBuy = True
+                    if Money > 0:
+                        amount = Money / closePrice
+                        Money = 0
+                        TradePrice = closePrice
+                        dataBP.append(closePrice)
+                        timeBP.append(timeID)
+                        print("buy point found,  ts: %d, close: %f, amount: %f,    round: %d/%d"%(timeID, closePrice,amount, i+1, tCount-windowLen))
                 elif lastMacd < gMacdBP:
                     gMacdBP = lastMacd
-                if Money > 0 and overBuy:
-                    amount = Money / closePrice
-                    Money = 0
-                    TradePrice = closePrice
-                    dataBP.append(closePrice)
-                    timeBP.append(timeID)
-                    print("buy point found,  ts: %d, close: %f, amount: %f,    round: %d/%d"%(timeID, closePrice,amount, i+1, tCount-windowLen))
             elif indicator == "sell":
                 dataSPA.append(closePrice)
                 timeSPA.append(timeID)
-                overSell = False
                 if not SPMAUsed and (lastMacd-gMacdBP)/lastSlowMA > stdMA:
                     SPMAUsed = True
                     BPMAUsed = False
                     gMacdSP = lastMacd
-                    overSell = True
                     timeSellForMa.append(timeID)
                     dataSellForMa.append(closePrice)
+                    if amount > 0:
+                        if TradePrice == 0:
+                            print("first point is sell, do nothing")
+                        else:
+                            Money = amount * closePrice
+                            amount = 0
+                            TradePrice = closePrice
+                            dataSP.append(closePrice)
+                            timeSP.append(timeID)
+                            print("sell point found, ts: %d, close: %f, Money:  %f, round: %d/%d"%(timeID, closePrice,Money,i+1, tCount-windowLen))
                 elif lastMacd > gMacdSP:
                         gMacdSP = lastMacd
-                if amount > 0 and overSell:
-                    if TradePrice == 0:
-                        print("first point is sell, do nothing")
-                    else:
-                        Money = amount * closePrice
-                        amount = 0
-                        TradePrice = closePrice
-                        dataSP.append(closePrice)
-                        timeSP.append(timeID)
-                        print("sell point found, ts: %d, close: %f, Money:  %f, round: %d/%d"%(timeID, closePrice,Money,i+1, tCount-windowLen))
         if Money == 0:
             RateOfReturn = TradePrice * amount / 10000.0 - 1.0
         elif amount == 0:
