@@ -93,7 +93,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
         else:
             BPLockList = [True]*len(symbols)
             SPLockList = [False]*len(symbols)
-        gMacdBPList = [0]*len(symbols)
+        gMacdBPList = [-99999999]*len(symbols)
         gMacdSPList = [99999999]*len(symbols)
         self.tradePriceList = [0]*len(symbols)
         self.timeIDList = [0]*len(symbols)
@@ -110,38 +110,42 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                 data.reverse()
                 indicator,timeID,clPrice,lastMacd,lastSlowMA,stdMA = CMMACD.CmIndicator(data)
                 timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                outStr = "symbol: %s, indicator: %s, has balance: %r, has amount: %r, timeID: %d, timeNow: %s" %(symbols[idx], indicator, not BPLockList[idx], not SPLockList[idx], timeID, timeNow)
+                outStr = "%s symbol: %s, indicator: %s, has balance: %r, has amount: %r, timeID: %d, lastMacd: %f, lastSlowMA: %f, gMacdBPList[idx]: %f, gMacdSPList[idx]:%f, stdMA: %f" %(timeNow, symbols[idx], indicator, not BPLockList[idx], not SPLockList[idx], timeID, lastMacd, lastSlowMA, gMacdBPList[idx], gMacdSPList[idx], stdMA)
                 f = open('out.log','a+')
                 print(outStr,file = f)
                 if indicator == "buy" and self.timeIDList[idx] != timeID:
+                    self.timeIDList[idx] = timeID
+                    buyStr = "lastMacd: %f, lastSlowMA: %f, gMacdSPList[idx]:%f, stdMA: %f" %(lastMacd, lastSlowMA, gMacdSPList[idx], stdMA)
+                    print(buyStr,file = f)
                     if not BPLockList[idx] and (gMacdSPList[idx]-lastMacd)/lastSlowMA > stdMA:
                         BPLockList[idx] = True
                         SPLockList[idx] = False
                         gMacdBPList[idx] = lastMacd
                         self.tradePriceList[idx] = clPrice
                         timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                        alertText = "HuoBi %s: will rise!!! buy now! time: %s"%(collection,timeNow)
+                        alertText = "%s HuoBi %s: will rise!!! buy now!"%(timeNow, collection)
                         print(alertText,file=f)
                         if symbols[idx] == "btcusdt":
                             self.Buy()
-                        self.timeIDList[idx] = timeID
                         for i in range(2):
                             text = "HuoBi %s-%s: 要涨了!!! 现在买入! 当前时间: %s, 报警提醒次数(%d/2)" %(symbols[idx],period,timeNow,i+1)
                             alert.Alert(text)
                     elif lastMacd < gMacdBPList[idx]:
                         gMacdBPList[idx] = lastMacd
                 elif indicator == "sell" and self.timeIDList[idx] != timeID:
+                    self.timeIDList[idx] = timeID
+                    sellStr = "lastMacd: %f, lastSlowMA: %f, gMacdBPList[idx]:%f, stdMA: %f" %(lastMacd, lastSlowMA, gMacdBPList[idx], stdMA)
+                    print(sellStr,file = f)
                     if not SPLockList[idx] and (lastMacd-gMacdBPList[idx])/lastSlowMA > stdMA:
                         SPLockList[idx] = True
                         BPLockList[idx] = False
                         gMacdSPList[idx] = lastMacd
                         self.tradePriceList[idx] = clPrice
                         timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                        alertText = "HuoBi %s: will descend!!! sell quickly! time: %s"%(collection,timeNow)
+                        alertText = "%s HuoBi %s: will descend!!! sell quickly!"%(timeNow, collection)
                         print(alertText,file=f)
                         if symbols[idx] == "btcusdt":
                             self.Sell()
-                        self.timeIDList[idx] = timeID
                         for i in range(2):
                             text = "HuoBi %s-%s: 要跌了!!! 赶紧卖掉! 当前时间: %s, 报警提醒次数(%d/2)" %(symbols[idx],period,timeNow,i+1)
                             alert.Alert(text)
@@ -298,6 +302,67 @@ class CmMacd(strategy.baseObj.baseObjSpot):
 
         #plt.legend()
         plt.show()
+
+    def OnlineTest(self,windowLen,symbols,period="5min"):
+        #amount = self.getAccountBalance("usdt")
+        # if float(amount) > 15.0:
+        #     BPLockList = [False]*len(symbols)
+        #     SPLockList = [True]*len(symbols)
+        # else:
+        BPLockList = [True]*len(symbols)
+        SPLockList = [False]*len(symbols)
+        gMacdBPList = [-99999999]*len(symbols)
+        gMacdSPList = [99999999]*len(symbols)
+        self.tradePriceList = [0]*len(symbols)
+        self.timeIDList = [0]*len(symbols)
+        for idx in range(len(symbols)):
+            collection = "HB-%s-%s"%(symbols[idx],period)
+            self.Collection = self.DB[collection]
+            data = []
+            DBcursor = self.Collection.find().sort('id', pymongo.ASCENDING).limit(windowLen)
+            for doc in DBcursor:
+                data.append(doc)
+            tCount = self.Collection.find().sort('id', pymongo.ASCENDING).count()
+            for i in range(tCount-windowLen):
+                print("%d/%d"%(i,tCount-windowLen))
+                DBcursor = self.Collection.find().sort('id', pymongo.ASCENDING).skip(i+windowLen).limit(1)
+                for doc in DBcursor:
+                    data = data[1:]
+                    data.append(doc)
+                indicator,timeID,clPrice,lastMacd,lastSlowMA,stdMA = CMMACD.CmIndicator(data)
+                timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                outStr = "%s symbol: %s, indicator: %s, has balance: %r, has amount: %r, timeID: %d, lastMacd: %f, lastSlowMA: %f, gMacdBPList[idx]: %f, gMacdSPList[idx]:%f, stdMA: %f" %(timeNow, symbols[idx], indicator, not BPLockList[idx], not SPLockList[idx], timeID, lastMacd, lastSlowMA, gMacdBPList[idx], gMacdSPList[idx], stdMA)
+                f = open('out.log','a+')
+                print(outStr,file = f)
+                if indicator == "buy" and self.timeIDList[idx] != timeID:
+                    self.timeIDList[idx] = timeID
+                    buyStr = "lastMacd: %f, lastSlowMA: %f, gMacdSPList[idx]:%f, stdMA: %f" %(lastMacd, lastSlowMA, gMacdSPList[idx], stdMA)
+                    print(buyStr,file = f)
+                    if not BPLockList[idx] and (gMacdSPList[idx]-lastMacd)/lastSlowMA > stdMA:
+                        BPLockList[idx] = True
+                        SPLockList[idx] = False
+                        gMacdBPList[idx] = lastMacd
+                        self.tradePriceList[idx] = clPrice
+                        timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        alertText = "%s HuoBi %s: will rise!!! buy now!"%(timeNow,collection)
+                        print(alertText,file=f)
+                    elif lastMacd < gMacdBPList[idx]:
+                        gMacdBPList[idx] = lastMacd
+                elif indicator == "sell" and self.timeIDList[idx] != timeID:
+                    self.timeIDList[idx] = timeID
+                    sellStr = "lastMacd: %f, lastSlowMA: %f, gMacdBPList[idx]:%f, stdMA: %f" %(lastMacd, lastSlowMA, gMacdBPList[idx], stdMA)
+                    print(sellStr,file = f)
+                    if not SPLockList[idx] and (lastMacd-gMacdBPList[idx])/lastSlowMA > stdMA:
+                        SPLockList[idx] = True
+                        BPLockList[idx] = False
+                        gMacdSPList[idx] = lastMacd
+                        self.tradePriceList[idx] = clPrice
+                        timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        alertText = "%s HuoBi %s: will descend!!! sell quickly!"%(timeNow, collection)
+                        print(alertText,file=f)
+                    elif lastMacd > gMacdSPList[idx]:
+                        gMacdSPList[idx] = lastMacd
+                f.close()
 
     def MAAverage(self,symbol):
         collection = "HB-%s-30min"%(symbol)
