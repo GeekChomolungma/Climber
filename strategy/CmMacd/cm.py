@@ -133,7 +133,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                         SPLockList[idx] = False
                         mustBuys[idx] = False
                         self.tradePriceList[idx] = clPrice
-                        self.AlarmAndAction(collection, symbols[idx], period, indicator, f)
+                        self.AlarmAndAction(collection, symbols[idx], period, "buy", f)
                         mids[idx] = False
                     elif not SPLockList[idx] and mustSells[idx]:
                         sellStr = "nothing, but sell: lastMacd: %f, lastSlowMA: %f, gMacdBPList[idx]:%f, stdMA: %f" %(lastMacd, lastSlowMA, gMacdBPList[idx], stdMA)
@@ -143,7 +143,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                         BPLockList[idx] = False
                         mustSells[idx] = False
                         self.tradePriceList[idx] = clPrice
-                        self.AlarmAndAction(collection, symbols[idx], period, indicator, f)
+                        self.AlarmAndAction(collection, symbols[idx], period, "sell", f)
                         mids[idx] = False
 
                 if indicator == "buy" and self.timeIDList[idx] != timeID:
