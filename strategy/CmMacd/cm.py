@@ -3,6 +3,7 @@ from re import L, T
 import sys
 
 import numpy as np
+from numpy.lib.index_tricks import ix_
 sys.path.append('..')
 import builtIndicators
 from indicators import CMMACD
@@ -97,6 +98,16 @@ class CmMacd(strategy.baseObj.baseObjSpot):
         gMacdSPList = [99999999]*len(symbols)
         self.tradePriceList = [0]*len(symbols)
         self.timeIDList = [0]*len(symbols)
+
+        mids = [True]*len(symbols)
+        mustBuys = [False]*len(symbols)
+        mustSells = [False]*len(symbols)
+        curFastMAList = [0]*len(symbols)
+        curSlowMAList = [0]*len(symbols)
+        curMA30List = [0]*len(symbols)
+        prevFastMAList = [0]*len(symbols)
+        preSlowMAList = [0]*len(symbols)
+        prevMA30List = [0]*len(symbols)
         while True:
             t = utils.ticker.Ticker(tickTime)
             t.Loop()
@@ -113,42 +124,81 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                 outStr = "%s symbol: %s, indicator: %s, has balance: %r, has amount: %r, timeID: %d, lastMacd: %f, lastSlowMA: %f, gMacdBPList[idx]: %f, gMacdSPList[idx]:%f, stdMA: %f" %(timeNow, symbols[idx], indicator, not BPLockList[idx], not SPLockList[idx], timeID, lastMacd, lastSlowMA, gMacdBPList[idx], gMacdSPList[idx], stdMA)
                 f = open('out.log','a+')
                 print(outStr,file = f)
+                if indicator == "nothing" and mids[idx]:
+                    if not BPLockList[idx] and mustBuys[idx]:
+                        buyStr = "nothing, but buy: lastMacd: %f, lastSlowMA: %f, gMacdSPList[idx]:%f, stdMA: %f" %(lastMacd, lastSlowMA, gMacdSPList[idx], stdMA)
+                        print(buyStr,file = f)
+                        gMacdBPList[idx] = lastMacd # optional
+                        BPLockList[idx] = True
+                        SPLockList[idx] = False
+                        mustBuys[idx] = False
+                        self.tradePriceList[idx] = clPrice
+                        self.AlarmAndAction(collection, symbols[idx], period, indicator, f)
+                        mids[idx] = False
+                    elif not SPLockList[idx] and mustSells[idx]:
+                        sellStr = "nothing, but sell: lastMacd: %f, lastSlowMA: %f, gMacdBPList[idx]:%f, stdMA: %f" %(lastMacd, lastSlowMA, gMacdBPList[idx], stdMA)
+                        print(sellStr,file = f)
+                        gMacdSPList[idx] = lastMacd # optional
+                        SPLockList[idx] = True
+                        BPLockList[idx] = False
+                        mustSells[idx] = False
+                        self.tradePriceList[idx] = clPrice
+                        self.AlarmAndAction(collection, symbols[idx], period, indicator, f)
+                        mids[idx] = False
+
                 if indicator == "buy" and self.timeIDList[idx] != timeID:
                     self.timeIDList[idx] = timeID
-                    buyStr = "lastMacd: %f, lastSlowMA: %f, gMacdSPList[idx]:%f, stdMA: %f" %(lastMacd, lastSlowMA, gMacdSPList[idx], stdMA)
+                    df = pd.DataFrame(data)
+                    close = df["close"]
+                    fastMA = builtIndicators.ma.EMA(close,5)
+                    slowMA = builtIndicators.ma.EMA(close,10)
+                    MA30 = builtIndicators.ma.EMA(close,30)
+                    curFastMAList[idx] = fastMA[len(fastMA)-1]
+                    curSlowMAList[idx] = slowMA[len(slowMA)-1]
+                    curMA30List[idx] = MA30[len(MA30)-1] 
+                    dangerous, mustSells[idx] = self.judgeBuy(curFastMAList[idx], curSlowMAList[idx], curMA30List[idx], prevFastMAList[idx], preSlowMAList[idx], prevMA30List[idx])
+                    prevFastMAList[idx] = curFastMAList[idx]
+                    preSlowMAList[idx] = curSlowMAList[idx]
+                    prevMA30List[idx] = curMA30List[idx]
+                    if mustSells[idx]:
+                        mids[idx] = True
+                    buyStr = "buy: lastMacd: %f, lastSlowMA: %f, gMacdSPList[idx]:%f, stdMA: %f" %(lastMacd, lastSlowMA, gMacdSPList[idx], stdMA)
                     print(buyStr,file = f)
-                    if not BPLockList[idx] and (gMacdSPList[idx]-lastMacd)/lastSlowMA > stdMA:
+                    if not mustSells[idx] and not BPLockList[idx] and ((mustBuys[idx] or (gMacdSPList[idx]-lastMacd)/lastSlowMA > stdMA)):
                         BPLockList[idx] = True
                         SPLockList[idx] = False
                         gMacdBPList[idx] = lastMacd
                         self.tradePriceList[idx] = clPrice
-                        timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                        alertText = "%s HuoBi %s: will rise!!! buy now!"%(timeNow, collection)
-                        print(alertText,file=f)
-                        if symbols[idx] == "btcusdt":
-                            self.Buy()
-                        for i in range(2):
-                            text = "HuoBi %s-%s: 要涨了!!! 现在买入! 当前时间: %s, 报警提醒次数(%d/2)" %(symbols[idx],period,timeNow,i+1)
-                            alert.Alert(text)
+                        mustBuys[idx] = False
+                        self.AlarmAndAction(collection, symbols[idx], period, indicator, f)
                     elif lastMacd < gMacdBPList[idx]:
                         gMacdBPList[idx] = lastMacd
-                elif indicator == "sell" and self.timeIDList[idx] != timeID:
+
+                if indicator == "sell" and self.timeIDList[idx] != timeID:
                     self.timeIDList[idx] = timeID
-                    sellStr = "lastMacd: %f, lastSlowMA: %f, gMacdBPList[idx]:%f, stdMA: %f" %(lastMacd, lastSlowMA, gMacdBPList[idx], stdMA)
+                    df = pd.DataFrame(data)
+                    close = df["close"]
+                    fastMA = builtIndicators.ma.EMA(close,5)
+                    slowMA = builtIndicators.ma.EMA(close,10)
+                    MA30 = builtIndicators.ma.EMA(close,30)
+                    curFastMAList[idx] = fastMA[len(fastMA)-1]
+                    curSlowMAList[idx] = slowMA[len(slowMA)-1]
+                    curMA30List[idx] = MA30[len(MA30)-1] 
+                    dangerous, mustBuys[idx] = self.judgeSell(curFastMAList[idx], curSlowMAList[idx], curMA30List[idx], prevFastMAList[idx], preSlowMAList[idx], prevMA30List[idx])
+                    prevFastMAList[idx] = curFastMAList[idx]
+                    preSlowMAList[idx] = curSlowMAList[idx]
+                    prevMA30List[idx] = curMA30List[idx]
+                    if mustBuys[idx]:
+                        mids[idx] = True
+                    sellStr = "sell: lastMacd: %f, lastSlowMA: %f, gMacdBPList[idx]:%f, stdMA: %f" %(lastMacd, lastSlowMA, gMacdBPList[idx], stdMA)
                     print(sellStr,file = f)
-                    if not SPLockList[idx] and (lastMacd-gMacdBPList[idx])/lastSlowMA > stdMA:
+                    if not mustBuys[idx] and not SPLockList[idx] and (mustSells[idx] or (lastMacd-gMacdBPList[idx])/lastSlowMA > stdMA): 
                         SPLockList[idx] = True
                         BPLockList[idx] = False
                         gMacdSPList[idx] = lastMacd
                         self.tradePriceList[idx] = clPrice
-                        timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                        alertText = "%s HuoBi %s: will descend!!! sell quickly!"%(timeNow, collection)
-                        print(alertText,file=f)
-                        if symbols[idx] == "btcusdt":
-                            self.Sell()
-                        for i in range(2):
-                            text = "HuoBi %s-%s: 要跌了!!! 赶紧卖掉! 当前时间: %s, 报警提醒次数(%d/2)" %(symbols[idx],period,timeNow,i+1)
-                            alert.Alert(text)
+                        mustSells[idx] = False
+                        self.AlarmAndAction(collection, symbols[idx], period, indicator, f)
                     elif lastMacd > gMacdSPList[idx]:
                         gMacdSPList[idx] = lastMacd
                 f.close()
@@ -158,6 +208,25 @@ class CmMacd(strategy.baseObj.baseObjSpot):
         balance = chomoClient.client.GetAccountBalance(currency)
         print("the currency: ", currency, "amount: ", balance)
         return balance
+
+    def AlarmAndAction(self, collection, symbol, period, indicator, outlog):
+        timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        if indicator == "buy":
+            alertText = "%s HuoBi %s: will rise!!! buy now!"%(timeNow, collection)
+            print(alertText,file=outlog)
+            if symbol == "btcusdt":
+                self.Buy()
+            for i in range(2):
+                text = "HuoBi %s-%s: 要涨了!!! 现在买入! 当前时间: %s, 报警提醒次数(%d/2)" %(symbol,period,timeNow,i+1)
+                alert.Alert(text)
+        if indicator == "sell":
+            alertText = "%s HuoBi %s: will descend!!! sell quickly!"%(timeNow, collection)
+            print(alertText,file=outlog)
+            if symbol == "btcusdt":
+                self.Sell()
+            for i in range(2):
+                text = "HuoBi %s-%s: 要跌了!!! 赶紧卖掉! 当前时间: %s, 报警提醒次数(%d/2)" %(symbol,period,timeNow,i+1)
+                alert.Alert(text)
 
     def Buy(self):
         amount = self.getAccountBalance("usdt")
