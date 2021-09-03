@@ -1,5 +1,5 @@
 from os import close
-from re import L
+from re import L, T
 import sys
 
 import numpy as np
@@ -175,7 +175,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
             print("But not enought btc, do not sell btc.")
     
     def BT5min(self,windowLen,symbol):
-        'Back Test'
+        'Back Test for huge stock, like btc'
         Money = 10000.0
         amount = 0.0
         RateOfReturn = 0.0
@@ -200,12 +200,16 @@ class CmMacd(strategy.baseObj.baseObjSpot):
         dataSP = []
         timeBP = []
         timeSP = []
+        std30Buy = []
+        std30Sell = []
         gMacdBP = 0
         gMacdSP = 0
-        timeBuyForMa = []
-        timeSellForMa = []
-        dataBuyForMa = []
-        dataSellForMa = []
+        prevFastMA = 0
+        preSlowMA = 0
+        prevMA30 = 0
+        mustBuy = False
+        mustSell = False
+        prevMacd = 0
         BPMAUsed = False
         SPMAUsed = False
         DBcursorAll = self.Collection.find().sort('id', pymongo.ASCENDING)
@@ -214,54 +218,113 @@ class CmMacd(strategy.baseObj.baseObjSpot):
         df = pd.DataFrame(dataAll)
         timeAll = df["id"]
         closeAll = df["close"]
+        fastMAAll = builtIndicators.ma.EMA(closeAll,5)
+        slowMAAll = builtIndicators.ma.EMA(closeAll,10)
+        MA30All = builtIndicators.ma.EMA(closeAll,30)
 
         # regardless of the initial window
         # loop
+        mid = True
         for i in range(tCount-windowLen):
             DBcursor = self.Collection.find().sort('id', pymongo.ASCENDING).skip(i+windowLen).limit(1)
             for doc in DBcursor:
                 data = data[1:]
                 data.append(doc)
             indicator,timeID,closePrice,lastMacd,lastSlowMA,stdMA= CMMACD.CmIndicator(data)
-            if indicator == "buy":
-                dataBPA.append(closePrice)
-                timeBPA.append(timeID)
-                if not BPMAUsed and (gMacdSP-lastMacd)/lastSlowMA > stdMA:
+            df = pd.DataFrame(data)
+            close = df["close"]
+            fastMA = builtIndicators.ma.EMA(close,5)
+            slowMA = builtIndicators.ma.EMA(close,10)
+            MA30 = builtIndicators.ma.EMA(close,30)
+            std30 = np.std(close-MA30)
+            if indicator == "nothing" and mid:
+                if mustBuy and Money > 0:
+                    gMacdBP = lastMacd # optional
                     BPMAUsed = True
                     SPMAUsed = False
-                    gMacdBP = lastMacd
-                    timeBuyForMa.append(timeID)
-                    dataBuyForMa.append(closePrice)
-                    if Money > 0:
-                        amount = Money / closePrice
-                        Money = 0
-                        TradePrice = closePrice
-                        dataBP.append(closePrice)
-                        timeBP.append(timeID)
-                        print("buy point found,  ts: %d, close: %f, amount: %f,    round: %d/%d"%(timeID, closePrice,amount, i+1, tCount-windowLen))
-                elif lastMacd < gMacdBP:
-                    gMacdBP = lastMacd
-            elif indicator == "sell":
-                dataSPA.append(closePrice)
-                timeSPA.append(timeID)
-                if not SPMAUsed and (lastMacd-gMacdBP)/lastSlowMA > stdMA:
+                    mustBuy = False
+                    amount = Money / closePrice * 0.998
+                    Money = 0
+                    TradePrice = closePrice
+                    dataBP.append(closePrice)
+                    timeBP.append(timeID)
+                    print("buy normal point found,  ts: %d, close: %f, amount: %f,    round: %d/%d"%(timeID, closePrice,amount, i+1, tCount-windowLen))
+                    mid = False
+                elif mustSell and amount>0:
+                    gMacdSP = lastMacd # optional
                     SPMAUsed = True
                     BPMAUsed = False
+                    mustSell = False
+                    Money = amount * closePrice * 0.998
+                    amount = 0
+                    TradePrice = closePrice
+                    dataSP.append(closePrice)
+                    timeSP.append(timeID)
+                    print("sell normal point found, ts: %d, close: %f, Money:  %f, round: %d/%d"%(timeID, closePrice,Money,i+1, tCount-windowLen))
+                    mid = False
+
+            if indicator == "buy":
+                std30Buy.append(std30)
+                dataBPA.append(closePrice)
+                timeBPA.append(timeID)
+                dangerous = False
+                curFastMA = fastMA[len(fastMA)-1]
+                curSlowMA = slowMA[len(slowMA)-1]
+                curMA30 = MA30[len(MA30)-1] 
+                dangerous, mustSell = self.judgeBuy(curFastMA, curSlowMA, curMA30, prevFastMA, preSlowMA, prevMA30)
+                if mustSell:
+                    mid = True
+                prevFastMA = curFastMA
+                preSlowMA = curSlowMA
+                prevMA30 = curMA30
+                if not mustSell and ((mustBuy and Money>0) or (not BPMAUsed and ((gMacdSP-lastMacd)/lastSlowMA > stdMA))): # or (dangerous and Money>0)
+                    BPMAUsed = True
+                    SPMAUsed = False
+                    mustBuy = False
+                    gMacdBP = lastMacd
+                    amount = Money / closePrice * 0.998
+                    Money = 0
+                    TradePrice = closePrice
+                    dataBP.append(closePrice)
+                    timeBP.append(timeID)
+                    print("buy point found,  ts: %d, close: %f, amount: %f,    round: %d/%d"%(timeID, closePrice,amount, i+1, tCount-windowLen))
+                elif lastMacd < gMacdBP:
+                    gMacdBP = lastMacd
+                dangerous = False
+                #prevMacd = lastMacd
+
+            if indicator == "sell":
+                std30Sell.append(std30)
+                dataSPA.append(closePrice)
+                timeSPA.append(timeID)
+                dangerous = False 
+                curFastMA = fastMA[len(fastMA)-1]
+                curSlowMA = slowMA[len(slowMA)-1]
+                curMA30 = MA30[len(MA30)-1]        
+                dangerous, mustBuy = self.judgeSell(curFastMA, curSlowMA, curMA30, prevFastMA, preSlowMA, prevMA30)
+                prevFastMA = curFastMA
+                preSlowMA = curSlowMA
+                prevMA30 = curMA30
+                if mustBuy:
+                    mid = True
+                if not mustBuy and ((mustSell and amount>0) or (not SPMAUsed and ((lastMacd-gMacdBP)/lastSlowMA > stdMA))): # or (dangerous and amount>0)
+                    SPMAUsed = True
+                    BPMAUsed = False
+                    mustSell = False
                     gMacdSP = lastMacd
-                    timeSellForMa.append(timeID)
-                    dataSellForMa.append(closePrice)
-                    if amount > 0:
-                        if TradePrice == 0:
-                            print("first point is sell, do nothing")
-                        else:
-                            Money = amount * closePrice
-                            amount = 0
-                            TradePrice = closePrice
-                            dataSP.append(closePrice)
-                            timeSP.append(timeID)
-                            print("sell point found, ts: %d, close: %f, Money:  %f, round: %d/%d"%(timeID, closePrice,Money,i+1, tCount-windowLen))
+                    if TradePrice == 0:
+                        print("first point is sell, do nothing")
+                    else:
+                        Money = amount * closePrice * 0.998
+                        amount = 0
+                        TradePrice = closePrice
+                        dataSP.append(closePrice)
+                        timeSP.append(timeID)
+                        print("sell point found, ts: %d, close: %f, Money:  %f, round: %d/%d"%(timeID, closePrice,Money,i+1, tCount-windowLen))
                 elif lastMacd > gMacdSP:
-                        gMacdSP = lastMacd
+                    gMacdSP = lastMacd
+                dangerous = False
+                #prevMacd = lastMacd
         if Money == 0:
             RateOfReturn = TradePrice * amount / 10000.0 - 1.0
         elif amount == 0:
@@ -282,6 +345,9 @@ class CmMacd(strategy.baseObj.baseObjSpot):
         f, (ax1, ax2, ax3, ax4) = plt.subplots(4,1,sharex=True,figsize=(8,12))
         #plt.subplot(211)
         ax1.plot(timeAll, closeAll, color='gray', label="close")
+        ax1.plot(timeAll, fastMAAll, color='y', label="MA30")
+        ax1.plot(timeAll, slowMAAll, color='g', label="MA30")
+        ax1.plot(timeAll, MA30All, color='m', label="MA30")
         ax1.scatter(timeBPA,dataBPA,marker='^',c='g',edgecolors='g')
         ax1.scatter(timeSPA,dataSPA,marker='v',c='r',edgecolors='r')
 
@@ -289,10 +355,10 @@ class CmMacd(strategy.baseObj.baseObjSpot):
         ax2.scatter(timeBP,dataBP,marker='o',c='w',edgecolors='g')
         ax2.scatter(timeSP,dataSP,marker='o',c='m',edgecolors='m')
 
-        ax4.plot(timeAll, closeAll, color='gray', label="close")
-        ax4.scatter(timeBuyForMa,dataBuyForMa,marker='o',c='w',edgecolors='g')
-        ax4.scatter(timeSellForMa,dataSellForMa,marker='o',c='m',edgecolors='m')
-
+        ax4.plot(timeAll, abs(closeAll-MA30All), color='royalblue', label="diff of close and ma30")
+        ax4.scatter(timeBPA,std30Buy,marker='^',c='g',edgecolors='g')
+        ax4.scatter(timeSPA,std30Sell,marker='v',c='r',edgecolors='r')
+        ax4.plot(timeAll, [0]*len(closeAll),color='k', label="0")
         #plt.subplot(212)
         ax3.plot(timeAll, MACD, label="MACD")
         ax3.plot(timeAll, signal, label="signal")
@@ -301,6 +367,161 @@ class CmMacd(strategy.baseObj.baseObjSpot):
         ax3.bar(timeAll,hist,width=600,label="hist")
 
         #plt.legend()
+        plt.show()
+
+    def judgeBuy(self, curFastMA, curSlowMA, curMA30, prevFastMA, preSlowMA, prevMA30):
+        dangerous = False
+        mustSell = False
+        if curFastMA > curSlowMA and prevFastMA < preSlowMA:
+            if curSlowMA > curMA30 and preSlowMA < prevMA30:
+                dangerous = True
+        if curFastMA < curSlowMA and prevFastMA > preSlowMA:
+            if curSlowMA < curMA30 and preSlowMA > prevMA30:
+                mustSell = True
+        return dangerous, mustSell
+    
+    def judgeSell(self, curFastMA, curSlowMA, curMA30, prevFastMA, preSlowMA, prevMA30):
+        dangerous = False
+        mustBuy = False
+        if curFastMA < curSlowMA and prevFastMA > preSlowMA:
+            if curSlowMA < curMA30 and preSlowMA > prevMA30:
+                dangerous = True
+        if curFastMA > curSlowMA and prevFastMA < preSlowMA:
+            if curSlowMA > curMA30 and preSlowMA < prevMA30:
+                mustBuy = True
+        return dangerous, mustBuy
+
+
+    def CMTest(self,windowLen,symbol):
+        'Standard Back Test of CMMACD'
+        Money = 10000.0
+        amount = 0.0
+        RateOfReturn = 0.0
+        TradePrice = 0.0
+        collection = "HB-%s-5min"%(symbol)
+        self.Collection = self.DB[collection]
+        tCount = self.Collection.find().sort('id', pymongo.ASCENDING).count()
+        data = []
+        DBcursor = self.Collection.find().sort('id', pymongo.ASCENDING).limit(windowLen)
+        for doc in DBcursor:
+            data.append(doc)
+            
+        # query all data for plot
+        dataAll = []
+        timeAll = []
+        closeAll = []
+        dataBPA = []
+        dataSPA = []
+        timeBPA = []
+        timeSPA = []
+        dataBP = []
+        dataSP = []
+        timeBP = []
+        timeSP = []
+        std30Buy = []
+        std30Sell = []
+        gMacdBP = -999999
+        gMacdSP = 999999
+        BPMAUsed = False
+        SPMAUsed = False
+        DBcursorAll = self.Collection.find().sort('id', pymongo.ASCENDING)
+        for docAll in DBcursorAll:
+            dataAll.append(docAll)
+        df = pd.DataFrame(dataAll)
+        timeAll = df["id"]
+        closeAll = df["close"]
+        fastMAAll = builtIndicators.ma.EMA(closeAll,5)
+        slowMAAll = builtIndicators.ma.EMA(closeAll,10)
+        MA30All = builtIndicators.ma.EMA(closeAll,30)
+
+        # regardless of the initial window
+        # loop
+        for i in range(tCount-windowLen):
+            DBcursor = self.Collection.find().sort('id', pymongo.ASCENDING).skip(i+windowLen).limit(1)
+            for doc in DBcursor:
+                data = data[1:]
+                data.append(doc)
+            indicator,timeID,closePrice,lastMacd,lastSlowMA,stdMA= CMMACD.CmIndicator(data)
+            df = pd.DataFrame(data)
+            close = df["close"]
+            fastMA = builtIndicators.ma.EMA(close,5)
+            slowMA = builtIndicators.ma.EMA(close,10)
+            MA30 = builtIndicators.ma.EMA(close,30)
+            std30 = np.std(close-MA30)
+            if indicator == "buy":
+                std30Buy.append(std30)
+                dataBPA.append(closePrice)
+                timeBPA.append(timeID)
+                if not BPMAUsed and (gMacdSP-lastMacd)/lastSlowMA > stdMA:
+                    BPMAUsed = True
+                    SPMAUsed = False
+                    gMacdBP = lastMacd
+                    amount = Money / closePrice * 0.998
+                    Money = 0
+                    TradePrice = closePrice
+                    dataBP.append(closePrice)
+                    timeBP.append(timeID)
+                    print("buy point found,  ts: %d, close: %f, amount: %f,    round: %d/%d"%(timeID, closePrice,amount, i+1, tCount-windowLen))
+                elif lastMacd < gMacdBP:
+                    gMacdBP = lastMacd
+
+            if indicator == "sell":
+                std30Sell.append(std30)
+                dataSPA.append(closePrice)
+                timeSPA.append(timeID)
+                if not SPMAUsed and (lastMacd-gMacdBP)/lastSlowMA > stdMA:
+                    SPMAUsed = True
+                    BPMAUsed = False
+                    gMacdSP = lastMacd
+                    if TradePrice == 0:
+                        print("first point is sell, do nothing")
+                    else:
+                        Money = amount * closePrice * 0.998
+                        amount = 0
+                        TradePrice = closePrice
+                        dataSP.append(closePrice)
+                        timeSP.append(timeID)
+                        print("sell point found, ts: %d, close: %f, Money:  %f, round: %d/%d"%(timeID, closePrice,Money,i+1, tCount-windowLen))
+                elif lastMacd > gMacdSP:
+                    gMacdSP = lastMacd
+        if Money == 0:
+            RateOfReturn = TradePrice * amount / 10000.0 - 1.0
+        elif amount == 0:
+            RateOfReturn = Money / 10000.0 - 1.0
+        print("Rate of Return in %s is %f"%(symbol, RateOfReturn))
+        fastMA = builtIndicators.ma.EMA(closeAll,12)
+        slowMA = builtIndicators.ma.EMA(closeAll,26)
+        MACD = fastMA - slowMA
+        signal = builtIndicators.ma.SMA(MACD,9)
+        hist = MACD - signal
+        crossIndexSell, crossIndexBuy= builtIndicators.cross.cross(MACD,signal)
+        crossTimesSell = [timeAll[ci] for ci in crossIndexSell]
+        crossSell = [signal[ci] for ci in crossIndexSell]
+        crossTimesBuy = [timeAll[ci] for ci in crossIndexBuy]
+        crossBuy = [signal[ci] for ci in crossIndexBuy]
+
+        f, (ax1, ax2, ax3, ax4) = plt.subplots(4,1,sharex=True,figsize=(8,12))
+        ax1.plot(timeAll, closeAll, color='gray', label="close")
+        ax1.plot(timeAll, fastMAAll, color='y', label="MA30")
+        ax1.plot(timeAll, slowMAAll, color='g', label="MA30")
+        ax1.plot(timeAll, MA30All, color='m', label="MA30")
+        ax1.scatter(timeBPA,dataBPA,marker='^',c='g',edgecolors='g')
+        ax1.scatter(timeSPA,dataSPA,marker='v',c='r',edgecolors='r')
+
+        ax2.plot(timeAll, closeAll, color='gray', label="close")
+        ax2.scatter(timeBP,dataBP,marker='o',c='w',edgecolors='g')
+        ax2.scatter(timeSP,dataSP,marker='o',c='m',edgecolors='m')
+
+        ax3.plot(timeAll, MACD, label="MACD")
+        ax3.plot(timeAll, signal, label="signal")
+        ax3.scatter(crossTimesSell,crossSell,marker='o',c='r',edgecolors='r')
+        ax3.scatter(crossTimesBuy,crossBuy,marker='o',c='g',edgecolors='g')
+        ax3.bar(timeAll,hist,width=600,label="hist")
+        
+        ax4.plot(timeAll, abs(closeAll-MA30All), color='royalblue', label="diff of close and ma30")
+        ax4.scatter(timeBPA,std30Buy,marker='^',c='g',edgecolors='g')
+        ax4.scatter(timeSPA,std30Sell,marker='v',c='r',edgecolors='r')
+        ax4.plot(timeAll, [0]*len(closeAll),color='k', label="0")
         plt.show()
 
     def OnlineTest(self,windowLen,symbols,period="5min"):
