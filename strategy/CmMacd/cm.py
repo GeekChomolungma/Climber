@@ -162,9 +162,9 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                     prevMA30List[idx] = curMA30List[idx]
                     if mustSells[idx]:
                         mids[idx] = True
-                    buyStr = "buy: lastMacd: %f, lastSlowMA: %f, gMacdSPList[idx]:%f, stdMA: %f" %(lastMacd, lastSlowMA, gMacdSPList[idx], stdMA)
-                    print(buyStr,file = f)
                     if not mustSells[idx] and not BPLockList[idx] and ((mustBuys[idx] or (gMacdSPList[idx]-lastMacd)/lastSlowMA > stdMA)):
+                        buyStr = "buy: lastMacd: %f, lastSlowMA: %f, gMacdSPList[idx]:%f, stdMA: %f" %(lastMacd, lastSlowMA, gMacdSPList[idx], stdMA)
+                        print(buyStr,file = f)
                         BPLockList[idx] = True
                         SPLockList[idx] = False
                         gMacdBPList[idx] = lastMacd
@@ -190,9 +190,9 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                     prevMA30List[idx] = curMA30List[idx]
                     if mustBuys[idx]:
                         mids[idx] = True
-                    sellStr = "sell: lastMacd: %f, lastSlowMA: %f, gMacdBPList[idx]:%f, stdMA: %f" %(lastMacd, lastSlowMA, gMacdBPList[idx], stdMA)
-                    print(sellStr,file = f)
                     if not mustBuys[idx] and not SPLockList[idx] and (mustSells[idx] or (lastMacd-gMacdBPList[idx])/lastSlowMA > stdMA): 
+                        sellStr = "sell: lastMacd: %f, lastSlowMA: %f, gMacdBPList[idx]:%f, stdMA: %f" %(lastMacd, lastSlowMA, gMacdBPList[idx], stdMA)
+                        print(sellStr,file = f)
                         SPLockList[idx] = True
                         BPLockList[idx] = False
                         gMacdSPList[idx] = lastMacd
