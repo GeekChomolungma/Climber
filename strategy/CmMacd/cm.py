@@ -608,28 +608,26 @@ class CmMacd(strategy.baseObj.baseObjSpot):
 
         # loop
         j = windowLen
-        RiseFlag = True
-        ChomoTime = 0
         for i in range(tCount4h - windowLen4h):
             DBcursor = CmU4h.Collection.find().sort('id', pymongo.ASCENDING).skip(i+windowLen4h).limit(1)
             for doc in DBcursor:
                 CmU4h.Data = CmU4h.Data[1:]
                 CmU4h.Data.append(doc)
-            indicator, Brought, Sold, closePrice, SameID, OverID = CmU4h.CmCoreOnePage(True,ChomoTime)
+            indicator, Brought, Sold, closePrice, SameID, OverID = CmU4h.CmCoreOnePage()
             if SameID == True:
                 print("continue")
                 continue
             date = datetime.datetime.fromtimestamp(CmU4h.TimeID).strftime('%Y-%m-%d %H:%M:%S')
             if Brought == True:
                 print("%s, 4hour buy point found,  ts: %d, close: %f, amount: %f,    round: %d/%d"%(date, CmU4h.TimeID, closePrice, CmU4h.Amount, i+1, tCount4h-windowLen4h))
-                RiseFlag = True
-                ChomoTime = CmU4h.TimeID
+                CmU30min.RiseFlag = True
+                CmU30min.ChomoTime = CmU4h.TimeID
                 dataBP4h.append(closePrice)
                 timeBP4h.append(CmU4h.TimeID)
             if Sold == True:
                 print("%s, 4hour sell point found, ts: %d, close: %f, Money:  %f, round: %d/%d"%(date, CmU4h.TimeID, closePrice, CmU4h.Money, i+1, tCount4h-windowLen4h))
-                RiseFlag = False
-                ChomoTime = CmU4h.TimeID
+                CmU30min.RiseFlag = False
+                CmU30min.ChomoTime = CmU4h.TimeID
                 dataSP4h.append(closePrice)
                 timeSP4h.append(CmU4h.TimeID)
             
@@ -639,7 +637,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                     CmU30min.Data = CmU30min.Data[1:]
                     CmU30min.Data.append(doc)
                 CmU30min.LimitID = CmU4h.TimeID
-                indicator, Brought, Sold, closePrice, SameID, OverID = CmU30min.CmCoreOnePage(RiseFlag, ChomoTime)
+                indicator, Brought, Sold, closePrice, SameID, OverID = CmU30min.CmCoreOnePage()
                 if SameID == True:
                     continue
                 if OverID:
@@ -716,12 +714,13 @@ class CmUnit:
     def __init__(self, BPLock, SPLock, GMacdBP, GMacdSP, MustBuy, MustSell, PrevFastMA, PreSlowMA, PrevMA30):
         self.BPLock = BPLock
         self.SPLock = SPLock
-        # self.RiseFlag = True
-        # self.DownFlag = True
+        self.RiseFlag = True
+        self.DownFlag = True
         self.GMacdBP = GMacdBP
         self.GMacdSP = GMacdSP
         self.TimeID = 0
         self.LimitID = 9999999999
+        self.ChomoTime = 0
         self.MustBuy = MustBuy
         self.MustSell = MustSell
         self.PrevFastMA = PrevFastMA
@@ -741,7 +740,7 @@ class CmUnit:
     def SetData(self, data):
         self.Data = data
 
-    def CmCoreOnePage(self, RiseFlag, ChomoTime):
+    def CmCoreOnePage(self):
         CanBuy = False
         Brought = False
         Sold = False
@@ -756,12 +755,12 @@ class CmUnit:
             SameID = True
             return indicator, Brought, Sold, closePrice, SameID, OverID
         
-        if RiseFlag == True:
-            if timeID > ChomoTime:
+        if self.RiseFlag == True:
+            if timeID >= self.ChomoTime:
                 CanBuy = True
         
-        if RiseFlag == False:
-            if timeID < ChomoTime:
+        if self.RiseFlag == False:
+            if timeID <= self.ChomoTime:
                 CanBuy = True
         
         self.TimeID = timeID
