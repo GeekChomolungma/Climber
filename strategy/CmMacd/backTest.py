@@ -6,5 +6,5 @@ cm5 = cm.CmMacd(conn_str)
 cm5.LoadDB("marketinfo")
 symbol = "btcusdt"
 symbols = ["btcusdt"]
-cm5.BT5min(300,symbol)
-#cm5.CMTest(300,symbol)
+#cm5.BT5min(300,symbol)
+cm5.CMTest(300,symbol)

@@ -1,9 +1,13 @@
-from os import close
+from enum import Flag
+from os import close, truncate
 from re import L, T
 import sys
 
 import numpy as np
 from numpy.lib.index_tricks import ix_
+from numpy.lib.twodim_base import triu_indices_from
+
+import indicators
 sys.path.append('..')
 import builtIndicators
 from indicators import CMMACD
@@ -98,8 +102,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
         
         gMacdBPList = [-99999999]*len(symbols)
         gMacdSPList = [99999999]*len(symbols)
-        self.tradePriceList = [0]*len(symbols)
-        self.timeIDList = [0]*len(symbols)
+        timeIDList = [0]*len(symbols)
         mustBuys = [False]*len(symbols)
         mustSells = [False]*len(symbols)
         curFastMAList = [0]*len(symbols)
@@ -111,14 +114,14 @@ class CmMacd(strategy.baseObj.baseObjSpot):
         
         # init the strategy
         for idx in range(len(symbols)):
-            initVals = self.InitModel(symbols[idx], period, windowLen, BPLockList[idx], SPLockList[idx], mustBuys[idx], mustSells[idx], gMacdBPList[idx], gMacdSPList[idx], 0, 0, 0)
+            initVals = self.InitModel(symbols[idx], period, windowLen, BPLockList[idx], SPLockList[idx], False, False, -99999999, 99999999, 0, 0, 0)
             BPLockList[idx] = initVals.BPLock 
             SPLockList[idx] = initVals.SPLock
             mustBuys[idx] = initVals.MustBuy
             mustSells[idx] = initVals.MustSell
             gMacdBPList[idx] = initVals.GMacdBP
             gMacdSPList[idx] = initVals.GMacdSP
-            self.timeIDList[idx] = initVals.TimeID
+            timeIDList[idx] = initVals.TimeID
             prevFastMAList[idx] = initVals.PrevFastMA
             preSlowMAList[idx] = initVals.PreSlowMA
             prevMA30List[idx] = initVals.PrevMA30
@@ -155,7 +158,6 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                         SPLockList[idx] = False
                         mustBuys[idx] = False
                         mustSells[idx] = False
-                        self.tradePriceList[idx] = clPrice
                         self.AlarmAndAction(collection, symbols[idx], period, "buy", f)
                     elif not SPLockList[idx] and mustSells[idx]:
                         sellStr = "nothing, but sell: lastMacd: %f, lastSlowMA: %f, gMacdBPList[idx]:%f, stdMA: %f" %(lastMacd, lastSlowMA, gMacdBPList[idx], stdMA)
@@ -165,11 +167,10 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                         BPLockList[idx] = False
                         mustSells[idx] = False
                         mustBuys[idx] = False
-                        self.tradePriceList[idx] = clPrice
                         self.AlarmAndAction(collection, symbols[idx], period, "sell", f)
 
-                if indicator == "buy" and self.timeIDList[idx] != timeID:
-                    self.timeIDList[idx] = timeID
+                if indicator == "buy" and timeIDList[idx] != timeID:
+                    timeIDList[idx] = timeID
                     df = pd.DataFrame(data)
                     close = df["close"]
                     fastMA = builtIndicators.ma.EMA(close,5)
@@ -188,14 +189,13 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                         BPLockList[idx] = True
                         SPLockList[idx] = False
                         gMacdBPList[idx] = lastMacd
-                        self.tradePriceList[idx] = clPrice
                         mustBuys[idx] = False
                         self.AlarmAndAction(collection, symbols[idx], period, indicator, f)
                     elif lastMacd < gMacdBPList[idx]:
                         gMacdBPList[idx] = lastMacd
 
-                if indicator == "sell" and self.timeIDList[idx] != timeID:
-                    self.timeIDList[idx] = timeID
+                if indicator == "sell" and timeIDList[idx] != timeID:
+                    timeIDList[idx] = timeID
                     df = pd.DataFrame(data)
                     close = df["close"]
                     fastMA = builtIndicators.ma.EMA(close,5)
@@ -214,7 +214,6 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                         SPLockList[idx] = True
                         BPLockList[idx] = False
                         gMacdSPList[idx] = lastMacd
-                        self.tradePriceList[idx] = clPrice
                         mustSells[idx] = False
                         self.AlarmAndAction(collection, symbols[idx], period, indicator, f)
                     elif lastMacd > gMacdSPList[idx]:
@@ -242,9 +241,10 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                 data = data[1:]
                 data.append(doc)
             indicator,timeID,clPrice,lastMacd,lastSlowMA,stdMA = CMMACD.CmIndicator(data)
+            date = datetime.datetime.fromtimestamp(timeID).strftime('%Y-%m-%d %H:%M:%S')
             if indicator == "nothing": 
                 if not BPLock and mustBuy:
-                    buyStr = "%s, timeid: %d, nothing but buy: lastMacd: %f, lastSlowMA: %f, gMacdSP:%f, stdMA: %f" %(collection, timeID, lastMacd, lastSlowMA, gMacdSP, stdMA)
+                    buyStr = "%s, %s, timeid: %d, nothing but buy: lastMacd: %f, lastSlowMA: %f, gMacdSP:%f, stdMA: %f" %(date, collection, timeID, lastMacd, lastSlowMA, gMacdSP, stdMA)
                     print(buyStr,file = f)
                     gMacdBP = lastMacd # optional
                     BPLock = True
@@ -252,7 +252,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                     mustBuy = False
                     mustSell = False
                 elif not SPLock and mustSell:
-                    sellStr = "%s, timeid: %d, nothing but sell: lastMacd: %f, lastSlowMA: %f, gMacdBP:%f, stdMA: %f" %(collection, timeID, lastMacd, lastSlowMA, gMacdBP, stdMA)
+                    sellStr = "%s, %s, timeid: %d, nothing but sell: lastMacd: %f, lastSlowMA: %f, gMacdBP:%f, stdMA: %f" %(date, collection, timeID, lastMacd, lastSlowMA, gMacdBP, stdMA)
                     print(sellStr,file = f)
                     gMacdSP = lastMacd # optional
                     SPLock = True
@@ -274,7 +274,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                 preSlowMA = curSlowMA
                 prevMA30 = curMA30
                 if not mustSell and not BPLock and ((mustBuy or (gMacdSP-lastMacd)/lastSlowMA > stdMA)):
-                    buyStr = "%s, timeid: %d: buy: lastMacd: %f, lastSlowMA: %f, gMacdSPList[idx]:%f, stdMA: %f" %(collection, timeID, lastMacd, lastSlowMA, gMacdSP, stdMA)
+                    buyStr = "%s, %s, timeid: %d: buy: lastMacd: %f, lastSlowMA: %f, gMacdSPList[idx]:%f, stdMA: %f" %(date, collection, timeID, lastMacd, lastSlowMA, gMacdSP, stdMA)
                     print(buyStr,file = f)
                     BPLock = True
                     SPLock = False
@@ -297,7 +297,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                 preSlowMA = curSlowMA
                 prevMA30 = curMA30
                 if not mustBuy and not SPLock and (mustSell or (lastMacd-gMacdBP)/lastSlowMA > stdMA): 
-                    sellStr = "%s, timeid: %d: sell: lastMacd: %f, lastSlowMA: %f, gMacdBPList[idx]:%f, stdMA: %f" %(collection, timeID, lastMacd, lastSlowMA, gMacdBP, stdMA)
+                    sellStr = "%s, %s, timeid: %d: sell: lastMacd: %f, lastSlowMA: %f, gMacdBPList[idx]:%f, stdMA: %f" %(date, collection, timeID, lastMacd, lastSlowMA, gMacdBP, stdMA)
                     print(sellStr,file = f)
                     SPLock = True
                     BPLock = False
@@ -558,105 +558,115 @@ class CmMacd(strategy.baseObj.baseObjSpot):
             if curSlowMA > curMA30 and preSlowMA < prevMA30:
                 mustBuy = True
         return dangerous, mustBuy
-
-
+    
     def CMTest(self,windowLen,symbol):
         'Standard Back Test of CMMACD'
-        Money = 10000.0
-        amount = 0.0
-        RateOfReturn = 0.0
-        TradePrice = 0.0
-        collection = "HB-%s-5min"%(symbol)
-        self.Collection = self.DB[collection]
-        tCount = self.Collection.find().sort('id', pymongo.ASCENDING).count()
-        data = []
-        DBcursor = self.Collection.find().sort('id', pymongo.ASCENDING).limit(windowLen)
-        for doc in DBcursor:
-            data.append(doc)
-            
-        # query all data for plot
-        dataAll = []
         timeAll = []
         closeAll = []
-        dataBPA = []
-        dataSPA = []
         timeBPA = []
         timeSPA = []
-        dataBP = []
-        dataSP = []
+        dataBPA = []
+        dataSPA = []
         timeBP = []
         timeSP = []
-        std30Buy = []
-        std30Sell = []
-        gMacdBP = -999999
-        gMacdSP = 999999
-        BPMAUsed = False
-        SPMAUsed = False
-        DBcursorAll = self.Collection.find().sort('id', pymongo.ASCENDING)
+        dataBP = []
+        dataSP = []
+        CmU30min = CmUnit(False, True, -999999, 999999, False, False, 0, 0, 0)
+        timeBP4h = []
+        timeSP4h = []
+        dataBP4h = []
+        dataSP4h = []
+        CmU4h = CmUnit(False, True, -999999, 999999, False, False, 0, 0, 0)
+        
+
+        dataAll = []
+        collection = "HB-%s-30min"%(symbol)
+        CmU30min.SetCollection(self.DB[collection])
+        tCount = CmU30min.Collection.find().sort('id', pymongo.ASCENDING).count()
+        DBcursorAll = CmU30min.Collection.find().sort('id', pymongo.ASCENDING)
         for docAll in DBcursorAll:
             dataAll.append(docAll)
         df = pd.DataFrame(dataAll)
         timeAll = df["id"]
         closeAll = df["close"]
+        data = dataAll[:windowLen]
+        CmU30min.SetData(data)
         fastMAAll = builtIndicators.ma.EMA(closeAll,5)
         slowMAAll = builtIndicators.ma.EMA(closeAll,10)
         MA30All = builtIndicators.ma.EMA(closeAll,30)
 
-        # regardless of the initial window
-        # loop
-        for i in range(tCount-windowLen):
-            DBcursor = self.Collection.find().sort('id', pymongo.ASCENDING).skip(i+windowLen).limit(1)
-            for doc in DBcursor:
-                data = data[1:]
-                data.append(doc)
-            indicator,timeID,closePrice,lastMacd,lastSlowMA,stdMA= CMMACD.CmIndicator(data)
-            df = pd.DataFrame(data)
-            close = df["close"]
-            fastMA = builtIndicators.ma.EMA(close,5)
-            slowMA = builtIndicators.ma.EMA(close,10)
-            MA30 = builtIndicators.ma.EMA(close,30)
-            std30 = np.std(close-MA30)
-            if indicator == "buy":
-                std30Buy.append(std30)
-                dataBPA.append(closePrice)
-                timeBPA.append(timeID)
-                if not BPMAUsed and (gMacdSP-lastMacd)/lastSlowMA > stdMA:
-                    BPMAUsed = True
-                    SPMAUsed = False
-                    gMacdBP = lastMacd
-                    amount = Money / closePrice * 0.998
-                    Money = 0
-                    TradePrice = closePrice
-                    dataBP.append(closePrice)
-                    timeBP.append(timeID)
-                    print("buy point found,  ts: %d, close: %f, amount: %f,    round: %d/%d"%(timeID, closePrice,amount, i+1, tCount-windowLen))
-                elif lastMacd < gMacdBP:
-                    gMacdBP = lastMacd
+        dataAll4h = []
+        windowLen4h = int(windowLen/8)
+        collection4h = "HB-%s-4hour"%(symbol)
+        CmU4h.SetCollection(self.DB[collection4h])
+        tCount4h = CmU4h.Collection.find().sort('id', pymongo.ASCENDING).count()
+        DBcursorAll4h = CmU4h.Collection.find().sort('id', pymongo.ASCENDING)
+        for docAll in DBcursorAll4h:
+            dataAll4h.append(docAll)
+        data4h = dataAll4h[:windowLen4h]
+        CmU4h.SetData(data4h)
 
-            if indicator == "sell":
-                std30Sell.append(std30)
-                dataSPA.append(closePrice)
-                timeSPA.append(timeID)
-                if not SPMAUsed and (lastMacd-gMacdBP)/lastSlowMA > stdMA:
-                    SPMAUsed = True
-                    BPMAUsed = False
-                    gMacdSP = lastMacd
-                    if TradePrice == 0:
-                        print("first point is sell, do nothing")
-                    else:
-                        Money = amount * closePrice * 0.998
-                        amount = 0
-                        TradePrice = closePrice
-                        dataSP.append(closePrice)
-                        timeSP.append(timeID)
-                        print("sell point found, ts: %d, close: %f, Money:  %f, round: %d/%d"%(timeID, closePrice,Money,i+1, tCount-windowLen))
-                elif lastMacd > gMacdSP:
-                    gMacdSP = lastMacd
-        if Money == 0:
-            RateOfReturn = TradePrice * amount / 10000.0 - 1.0
-        elif amount == 0:
-            RateOfReturn = Money / 10000.0 - 1.0
-        print("Rate of Return in %s is %f"%(symbol, RateOfReturn))
+        # loop
+        j = windowLen
+        RiseFlag = True
+        ChomoTime = 0
+        for i in range(tCount4h - windowLen4h):
+            DBcursor = CmU4h.Collection.find().sort('id', pymongo.ASCENDING).skip(i+windowLen4h).limit(1)
+            for doc in DBcursor:
+                CmU4h.Data = CmU4h.Data[1:]
+                CmU4h.Data.append(doc)
+            indicator, Brought, Sold, closePrice, SameID, OverID = CmU4h.CmCoreOnePage(True,ChomoTime)
+            if SameID == True:
+                print("continue")
+                continue
+            date = datetime.datetime.fromtimestamp(CmU4h.TimeID).strftime('%Y-%m-%d %H:%M:%S')
+            if Brought == True:
+                print("%s, 4hour buy point found,  ts: %d, close: %f, amount: %f,    round: %d/%d"%(date, CmU4h.TimeID, closePrice, CmU4h.Amount, i+1, tCount4h-windowLen4h))
+                RiseFlag = True
+                ChomoTime = CmU4h.TimeID
+                dataBP4h.append(closePrice)
+                timeBP4h.append(CmU4h.TimeID)
+            if Sold == True:
+                print("%s, 4hour sell point found, ts: %d, close: %f, Money:  %f, round: %d/%d"%(date, CmU4h.TimeID, closePrice, CmU4h.Money, i+1, tCount4h-windowLen4h))
+                RiseFlag = False
+                ChomoTime = CmU4h.TimeID
+                dataSP4h.append(closePrice)
+                timeSP4h.append(CmU4h.TimeID)
+            
+            while j < tCount:
+                DBcursor = CmU30min.Collection.find().sort('id', pymongo.ASCENDING).skip(j).limit(1)
+                for doc in DBcursor:
+                    CmU30min.Data = CmU30min.Data[1:]
+                    CmU30min.Data.append(doc)
+                CmU30min.LimitID = CmU4h.TimeID
+                indicator, Brought, Sold, closePrice, SameID, OverID = CmU30min.CmCoreOnePage(RiseFlag, ChomoTime)
+                if SameID == True:
+                    continue
+                if OverID:
+                    break
+                if indicator == "buy":
+                    dataBPA.append(closePrice)
+                    timeBPA.append(CmU30min.TimeID)
+                if indicator == "sell":
+                    dataSPA.append(closePrice)
+                    timeSPA.append(CmU30min.TimeID)
+                date = datetime.datetime.fromtimestamp(CmU30min.TimeID).strftime('%Y-%m-%d %H:%M:%S')
+                if Brought == True:
+                    print("%s, buy, indicator: %s, ts: %d, close: %f, amount: %f,    round: %d/%d"%(date, indicator, CmU30min.TimeID, closePrice, CmU30min.Amount, j+1, tCount))
+                    dataBP.append(closePrice)
+                    timeBP.append(CmU30min.TimeID)
+                if Sold == True:
+                    print("%s, sell, indicator: %s, ts: %d, close: %f, Money:  %f, round: %d/%d"%(date, indicator, CmU30min.TimeID, closePrice, CmU30min.Money, j+1, tCount))
+                    dataSP.append(closePrice)
+                    timeSP.append(CmU30min.TimeID)
+                j += 1
+                    
+        RateOfReturn = 0.0
+        if CmU30min.Money == 0:
+            RateOfReturn = closePrice * CmU30min.Amount / 10000.0 - 1.0
+        elif CmU30min.Amount == 0:
+            RateOfReturn = CmU30min.Money / 10000.0 - 1.0
+        print("Rate of Return in %s is %f, Money:%f, amount:%f, closePrice:%f"%(symbol, RateOfReturn, CmU30min.Money, CmU30min.Amount, closePrice))
         fastMA = builtIndicators.ma.EMA(closeAll,12)
         slowMA = builtIndicators.ma.EMA(closeAll,26)
         MACD = fastMA - slowMA
@@ -668,7 +678,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
         crossTimesBuy = [timeAll[ci] for ci in crossIndexBuy]
         crossBuy = [signal[ci] for ci in crossIndexBuy]
 
-        f, (ax1, ax2, ax3, ax4) = plt.subplots(4,1,sharex=True,figsize=(8,12))
+        f, (ax1, ax2, ax3) = plt.subplots(3,1,sharex=True,figsize=(8,12))
         ax1.plot(timeAll, closeAll, color='gray', label="close")
         ax1.plot(timeAll, fastMAAll, color='y', label="MA30")
         ax1.plot(timeAll, slowMAAll, color='g', label="MA30")
@@ -679,102 +689,14 @@ class CmMacd(strategy.baseObj.baseObjSpot):
         ax2.plot(timeAll, closeAll, color='gray', label="close")
         ax2.scatter(timeBP,dataBP,marker='o',c='w',edgecolors='g')
         ax2.scatter(timeSP,dataSP,marker='o',c='m',edgecolors='m')
+        ax2.scatter(timeBP4h,dataBP4h,marker='^',c='g',edgecolors='g')
+        ax2.scatter(timeSP4h,dataSP4h,marker='v',c='r',edgecolors='r')
 
         ax3.plot(timeAll, MACD, label="MACD")
         ax3.plot(timeAll, signal, label="signal")
         ax3.scatter(crossTimesSell,crossSell,marker='o',c='r',edgecolors='r')
         ax3.scatter(crossTimesBuy,crossBuy,marker='o',c='g',edgecolors='g')
         ax3.bar(timeAll,hist,width=600,label="hist")
-        
-        ax4.plot(timeAll, abs(closeAll-MA30All), color='royalblue', label="diff of close and ma30")
-        ax4.scatter(timeBPA,std30Buy,marker='^',c='g',edgecolors='g')
-        ax4.scatter(timeSPA,std30Sell,marker='v',c='r',edgecolors='r')
-        ax4.plot(timeAll, [0]*len(closeAll),color='k', label="0")
-        plt.show()
-
-    def OnlineTest(self,windowLen,symbols,period="5min"):
-        #amount = self.getAccountBalance("usdt")
-        # if float(amount) > 15.0:
-        #     BPLockList = [False]*len(symbols)
-        #     SPLockList = [True]*len(symbols)
-        # else:
-        BPLockList = [True]*len(symbols)
-        SPLockList = [False]*len(symbols)
-        gMacdBPList = [-99999999]*len(symbols)
-        gMacdSPList = [99999999]*len(symbols)
-        self.tradePriceList = [0]*len(symbols)
-        self.timeIDList = [0]*len(symbols)
-        for idx in range(len(symbols)):
-            collection = "HB-%s-%s"%(symbols[idx],period)
-            self.Collection = self.DB[collection]
-            data = []
-            DBcursor = self.Collection.find().sort('id', pymongo.ASCENDING).limit(windowLen)
-            for doc in DBcursor:
-                data.append(doc)
-            tCount = self.Collection.find().sort('id', pymongo.ASCENDING).count()
-            for i in range(tCount-windowLen):
-                print("%d/%d"%(i,tCount-windowLen))
-                DBcursor = self.Collection.find().sort('id', pymongo.ASCENDING).skip(i+windowLen).limit(1)
-                for doc in DBcursor:
-                    data = data[1:]
-                    data.append(doc)
-                indicator,timeID,clPrice,lastMacd,lastSlowMA,stdMA = CMMACD.CmIndicator(data)
-                timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                outStr = "%s symbol: %s, indicator: %s, has balance: %r, has amount: %r, timeID: %d, lastMacd: %f, lastSlowMA: %f, gMacdBPList[idx]: %f, gMacdSPList[idx]:%f, stdMA: %f" %(timeNow, symbols[idx], indicator, not BPLockList[idx], not SPLockList[idx], timeID, lastMacd, lastSlowMA, gMacdBPList[idx], gMacdSPList[idx], stdMA)
-                f = open('out.log','a+')
-                print(outStr,file = f)
-                if indicator == "buy" and self.timeIDList[idx] != timeID:
-                    self.timeIDList[idx] = timeID
-                    buyStr = "lastMacd: %f, lastSlowMA: %f, gMacdSPList[idx]:%f, stdMA: %f" %(lastMacd, lastSlowMA, gMacdSPList[idx], stdMA)
-                    print(buyStr,file = f)
-                    if not BPLockList[idx] and (gMacdSPList[idx]-lastMacd)/lastSlowMA > stdMA:
-                        BPLockList[idx] = True
-                        SPLockList[idx] = False
-                        gMacdBPList[idx] = lastMacd
-                        self.tradePriceList[idx] = clPrice
-                        timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                        alertText = "%s HuoBi %s: will rise!!! buy now!"%(timeNow,collection)
-                        print(alertText,file=f)
-                    elif lastMacd < gMacdBPList[idx]:
-                        gMacdBPList[idx] = lastMacd
-                elif indicator == "sell" and self.timeIDList[idx] != timeID:
-                    self.timeIDList[idx] = timeID
-                    sellStr = "lastMacd: %f, lastSlowMA: %f, gMacdBPList[idx]:%f, stdMA: %f" %(lastMacd, lastSlowMA, gMacdBPList[idx], stdMA)
-                    print(sellStr,file = f)
-                    if not SPLockList[idx] and (lastMacd-gMacdBPList[idx])/lastSlowMA > stdMA:
-                        SPLockList[idx] = True
-                        BPLockList[idx] = False
-                        gMacdSPList[idx] = lastMacd
-                        self.tradePriceList[idx] = clPrice
-                        timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                        alertText = "%s HuoBi %s: will descend!!! sell quickly!"%(timeNow, collection)
-                        print(alertText,file=f)
-                    elif lastMacd > gMacdSPList[idx]:
-                        gMacdSPList[idx] = lastMacd
-                f.close()
-
-    def MAAverage(self,symbol):
-        collection = "HB-%s-30min"%(symbol)
-        self.Collection = self.DB[collection]
-        dataAll = []
-        timeAll = []
-        DBcursorAll = self.Collection.find().sort('id', pymongo.ASCENDING)
-        for docAll in DBcursorAll:
-            dataAll.append(docAll)
-        df = pd.DataFrame(dataAll)
-        timeAll = df["id"]
-        closeAll = df["close"]
-        fastMA = builtIndicators.ma.EMA(closeAll,12)
-        slowMA = builtIndicators.ma.EMA(closeAll,26)
-        MACD = fastMA - slowMA
-        f, (ax1, ax2,ax3) = plt.subplots(3,1,sharex=True,figsize=(8,12))
-        ax1.plot(timeAll, fastMA, color='gray', label="fastMA")
-        ax1.plot(timeAll, slowMA, color='orange', label="slowMA")
-        ax2.plot(timeAll, [0]*len(timeAll), color='black', label="ZERO")
-        ax2.plot(timeAll, MACD, color='blue', label="MACD")
-        print(np.std(abs(MACD/slowMA)))
-        #ax3.plot(timeAll, np.var(MACD/slowMA), color='blue', label="var for macd/slowMA")
-        ax3.scatter(timeAll, MACD/slowMA, marker='o',c='w',edgecolors='g')
         plt.show()
 
 class InitVals:
@@ -789,3 +711,134 @@ class InitVals:
         self.PrevFastMA = prevFastMA
         self.PreSlowMA = preSlowMA
         self.PrevMA30 = prevMA30
+
+class CmUnit:
+    def __init__(self, BPLock, SPLock, GMacdBP, GMacdSP, MustBuy, MustSell, PrevFastMA, PreSlowMA, PrevMA30):
+        self.BPLock = BPLock
+        self.SPLock = SPLock
+        # self.RiseFlag = True
+        # self.DownFlag = True
+        self.GMacdBP = GMacdBP
+        self.GMacdSP = GMacdSP
+        self.TimeID = 0
+        self.LimitID = 9999999999
+        self.MustBuy = MustBuy
+        self.MustSell = MustSell
+        self.PrevFastMA = PrevFastMA
+        self.PreSlowMA = PreSlowMA
+        self.PrevMA30 = PrevMA30
+
+        self.TradePrice = 0
+        self.CurFastMA = 0
+        self.CurSlowMA = 0
+        self.CurMA30 = 0
+        self.Money = 10000.0
+        self.Amount = 0.0
+
+    def SetCollection(self, c):
+        self.Collection = c
+    
+    def SetData(self, data):
+        self.Data = data
+
+    def CmCoreOnePage(self, RiseFlag, ChomoTime):
+        CanBuy = False
+        Brought = False
+        Sold = False
+        SameID = False
+        OverID = False
+        indicator,timeID,closePrice,lastMacd,lastSlowMA,stdMA= CMMACD.CmIndicator(self.Data)
+        if timeID > self.LimitID:
+            OverID = True
+            return indicator, Brought, Sold, closePrice, SameID, OverID
+
+        if self.TimeID == timeID:
+            SameID = True
+            return indicator, Brought, Sold, closePrice, SameID, OverID
+        
+        if RiseFlag == True:
+            if timeID > ChomoTime:
+                CanBuy = True
+        
+        if RiseFlag == False:
+            if timeID < ChomoTime:
+                CanBuy = True
+        
+        self.TimeID = timeID
+        if indicator == "nothing" :
+            if CanBuy and self.MustBuy and not self.BPLock:
+                self.GMacdBP = lastMacd # optional
+                self.BPLock = True
+                self.SPLock = False
+                self.MustBuy = False
+                self.MustSell = False
+                self.Amount = self.Money / closePrice * 0.998
+                self.Money = 0
+                Brought = True
+            elif self.MustSell and not self.SPLock:
+                print("nothing but sell, id: %d, preID: %d"%(timeID, self.TimeID))
+                self.GMacdSP = lastMacd # optional
+                self.SPLock = True
+                self.BPLock = False
+                self.MustSell = False
+                self.MustBuy = False
+                self.Money = self.Amount * closePrice * 0.998
+                self.Amount = 0
+                Sold = True
+
+        if indicator == "buy":
+            up, down, self.PrevFastMA, self.PreSlowMA, self.PrevMA30 = self.GenMustSignal(self.Data, self.PrevFastMA, self.PreSlowMA, self.PrevMA30)
+            self.MustSell = down
+            if CanBuy and not self.MustSell and not self.BPLock and ((self.MustBuy or (self.GMacdSP-lastMacd)/lastSlowMA > stdMA)):
+                #print("Buy action, %s%s%s%s"%(self.MustSell, self.BPLock, self.MustBuy, (self.GMacdSP-lastMacd)/lastSlowMA > stdMA))
+                self.BPLock = True
+                self.SPLock = False
+                self.GMacdBP = lastMacd
+                self.Amount = self.Money / closePrice * 0.998
+                self.Money = 0
+                self.MustBuy = False
+                Brought = True
+            elif lastMacd < self.GMacdBP:
+                self.GMacdBP = lastMacd
+
+        if indicator == "sell":
+            up, down, self.PrevFastMA, self.PreSlowMA, self.PrevMA30 = self.GenMustSignal(self.Data, self.PrevFastMA, self.PreSlowMA, self.PrevMA30)
+            self.MustBuy = up
+            if not self.MustBuy and not self.SPLock and (self.MustSell or (lastMacd-self.GMacdBP)/lastSlowMA > stdMA):
+                #print("Sell action, %s%s%s%s"%(self.MustBuy, self.SPLock, self.MustSell, (lastMacd-self.GMacdBP)/lastSlowMA > stdMA)) 
+                self.SPLock = True
+                self.BPLock = False
+                self.GMacdSP = lastMacd
+                self.Money = self.Amount * closePrice * 0.998
+                self.Amount = 0
+                self.MustSell = False
+                Sold = True
+            elif lastMacd > self.GMacdSP:
+                self.GMacdSP = lastMacd
+        return indicator, Brought, Sold, closePrice, SameID, OverID
+
+    def GenMustSignal(self, data, prevFastMA, preSlowMA, prevMA30):
+        df = pd.DataFrame(data)
+        close = df["close"]
+        fastMA = builtIndicators.ma.EMA(close,5)
+        slowMA = builtIndicators.ma.EMA(close,10)
+        MA30 = builtIndicators.ma.EMA(close,30)
+        curFastMA = fastMA[len(fastMA)-1]
+        curSlowMA = slowMA[len(slowMA)-1]
+        curMA30 = MA30[len(MA30)-1] 
+        up, down = self.judgeCross(curFastMA, curSlowMA, curMA30, prevFastMA, preSlowMA, prevMA30)
+        prevFastMA = curFastMA
+        preSlowMA = curSlowMA
+        prevMA30 = curMA30
+        return up, down, prevFastMA, preSlowMA, prevMA30
+
+    def judgeCross(self, curFastMA, curSlowMA, curMA30, prevFastMA, preSlowMA, prevMA30):
+        up = False
+        down = False
+        if curFastMA > curSlowMA and prevFastMA < preSlowMA:
+            if curSlowMA > curMA30 and preSlowMA < prevMA30:
+                up = True
+        if curFastMA < curSlowMA and prevFastMA > preSlowMA:
+            if curSlowMA < curMA30 and preSlowMA > prevMA30:
+                down = True
+        return up, down
