@@ -7,4 +7,5 @@ cm = cm.CmMacd(conn_str)
 cm.LoadDB("marketinfo")
 symbols = ["btcusdt","ethusdt","bchusdt","ltcusdt"]
 #cm.RunV2("1min",300,symbols,"30min")
-cm.RunV3(symbols, 300, "30min", "4hour")
+#cm.RunV3(symbols, 300, "30min", "4hour")
+cm.RunV2Re(symbols, 300, "30min")
