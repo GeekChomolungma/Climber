@@ -128,7 +128,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
             collection = "HB-%s-%s"%(symbols[idx],period)
             f = open('out.log','a+')
             overStr = "%s initially done. BPLock: %r, SPLock: %r, mustBuy: %r, mustSell: %r, gMacdBP: %f, gMacdSP: %f, timeID: %d, prevFastMA: %f, preSlowMA: %f, prevMA30: %f" \
-                 %(collection, BPLockList[idx], SPLockList[idx], mustBuys[idx], mustSells[idx], gMacdBPList[idx], gMacdSPList[idx], self.timeIDList[idx], prevFastMAList[idx], preSlowMAList[idx], prevMA30List[idx])
+                 %(collection, BPLockList[idx], SPLockList[idx], mustBuys[idx], mustSells[idx], gMacdBPList[idx], gMacdSPList[idx], timeIDList[idx], prevFastMAList[idx], preSlowMAList[idx], prevMA30List[idx])
             print(overStr,file = f)
             f.close()
 
@@ -252,7 +252,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                         HighCollection = "HB-%s-%s"%(highUnit.Symbol,highUnit.Period)
                         highUnit.Data = highUnit.Data[1:]
                         highUnit.Data.append(doc)
-                        indicator, Brought, Sold, closePrice, SameID, OverID = highUnit.CmCoreWithoutMustSignal()
+                        indicator, Brought, Sold, closePrice, SameID = highUnit.CmCoreWithoutMustSignal()
                         if SameID == True:
                             outStr = "%s, %s, Warning: Found SameID!"%(timeNow, HighCollection)
                             print(outStr, file=f)
@@ -276,14 +276,10 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                         baseUnit.Data = baseUnit.Data[1:]
                         baseUnit.Data.append(doc)
                         baseUnit.LimitID = highUnit.TimeID
-                        indicator, Brought, Sold, closePrice, SameID, OverID = baseUnit.CmCoreOnePage()
+                        indicator, Brought, Sold, closePrice, SameID = baseUnit.CmCoreOnePage()
                         if SameID == True:
                             outStr = "%s, %s, Warning: Found SameID!"%(timeNow, BaseCollection)
                             print(outStr, file=f)
-                        if OverID:
-                            outStr = "%s, %s, Warning: Found baseUnit ID Over HighUnit!"%(timeNow, BaseCollection)
-                            print(outStr, file=f)
-                            break
                         if Brought == True:
                             action = "Brought"
                             self.AlarmAndAction(BaseCollection, baseUnit.Symbol, baseUnit.Period, "buy", f)
@@ -297,6 +293,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                             
     def InitMoedlV3(self, symbols, baseUnits, highUnits):
         for idx in range(len(symbols)):
+            timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             f = open('out.log','a+')
             baseUnit = baseUnits[idx]
             highUnit = highUnits[idx]
@@ -326,7 +323,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                 for doc in DBcursor:
                     highUnit.Data = highUnit.Data[1:]
                     highUnit.Data.append(doc)
-                indicator, Brought, Sold, closePrice, SameID, OverID = highUnit.CmCoreWithoutMustSignal()
+                indicator, Brought, Sold, closePrice, SameID = highUnit.CmCoreWithoutMustSignal()
                 if SameID == True:
                     print("continue")
                     continue
@@ -341,16 +338,25 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                     baseUnit.ChomoTime = highUnit.TimeID
                 
                 while j < BaseCount:
+                    OverID = False
                     DBcursor = baseUnit.Collection.find().sort('id', pymongo.ASCENDING).skip(j).limit(1)
                     for doc in DBcursor:
+                        LatestTimeID = doc["id"]
+                        if LatestTimeID >= highUnit.TimeID + 4*3600:
+                            # over High Time ID.
+                            OverID = True
+                            break
                         baseUnit.Data = baseUnit.Data[1:]
                         baseUnit.Data.append(doc)
+                    if OverID:
+                        BaseCollection = "HB-%s-%s"%(baseUnit.Symbol,baseUnit.Period)
+                        outStr = "%s, %s, Warning: Found baseUnit ID Over HighUnit! base ID:%s, high ID:%s"%(timeNow, BaseCollection, LatestTimeID, highUnit.TimeID + 4*3600)
+                        print(outStr, file=f)
+                        break
                     baseUnit.LimitID = highUnit.TimeID
-                    indicator, Brought, Sold, closePrice, SameID, OverID = baseUnit.CmCoreOnePage()
+                    indicator, Brought, Sold, closePrice, SameID = baseUnit.CmCoreOnePage()
                     if SameID == True:
                         continue
-                    if OverID:
-                        break
                     date = datetime.datetime.fromtimestamp(baseUnit.TimeID).strftime('%Y-%m-%d %H:%M:%S')
                     if Brought == True:
                         print("%s, HB-%s-%s, Brought, indicator: %s, ts: %d, close: %f, amount: %f, round: %d/%d"%(date, baseUnit.Symbol, baseUnit.Period, indicator, baseUnit.TimeID, closePrice, baseUnit.Amount, j+1, BaseCount), file = f)
@@ -764,7 +770,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
             for doc in DBcursor:
                 CmU4h.Data = CmU4h.Data[1:]
                 CmU4h.Data.append(doc)
-            indicator, Brought, Sold, closePrice, SameID, OverID = CmU4h.CmCoreWithoutMustSignal()
+            indicator, Brought, Sold, closePrice, SameID = CmU4h.CmCoreWithoutMustSignal()
             if SameID == True:
                 print("continue")
                 continue
@@ -783,23 +789,32 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                 timeSP4h.append(CmU4h.TimeID)
             
             while j < tCount:
+                date = datetime.datetime.fromtimestamp(CmU30min.TimeID).strftime('%Y-%m-%d %H:%M:%S')
+                OverID = False
                 DBcursor = CmU30min.Collection.find().sort('id', pymongo.ASCENDING).skip(j).limit(1)
                 for doc in DBcursor:
+                    LatestTimeID = doc["id"]
+                    if LatestTimeID >= CmU4h.TimeID + 4*3600:
+                        # over High Time ID.
+                        OverID = True
+                        break
                     CmU30min.Data = CmU30min.Data[1:]
                     CmU30min.Data.append(doc)
-                CmU30min.LimitID = CmU4h.TimeID
-                indicator, Brought, Sold, closePrice, SameID, OverID = CmU30min.CmCoreOnePage()
+                if OverID:
+                    BaseCollection = "HB-%s-%s"%(symbol,"30min")
+                    outStr = "%s, %s, Warning: Found baseUnit ID Over HighUnit! base ID:%s, high ID:%s "%(date, BaseCollection, LatestTimeID, CmU4h.TimeID + 4*3600)
+                    print(outStr)
+                    break
+                
+                indicator, Brought, Sold, closePrice, SameID = CmU30min.CmCoreOnePage()
                 if SameID == True:
                     continue
-                if OverID:
-                    break
                 if indicator == "buy":
                     dataBPA.append(closePrice)
                     timeBPA.append(CmU30min.TimeID)
                 if indicator == "sell":
                     dataSPA.append(closePrice)
                     timeSPA.append(CmU30min.TimeID)
-                date = datetime.datetime.fromtimestamp(CmU30min.TimeID).strftime('%Y-%m-%d %H:%M:%S')
                 if Brought == True:
                     print("%s, buy, indicator: %s, ts: %d, close: %f, amount: %f,    round: %d/%d"%(date, indicator, CmU30min.TimeID, closePrice, CmU30min.Amount, j+1, tCount))
                     dataBP.append(closePrice)
@@ -899,15 +914,10 @@ class CmUnit:
         Brought = False
         Sold = False
         SameID = False
-        OverID = False
         indicator,timeID,closePrice,lastMacd,lastSlowMA,stdMA= CMMACD.CmIndicator(self.Data)
-        if timeID > self.LimitID:
-            OverID = True
-            return indicator, Brought, Sold, closePrice, SameID, OverID
-
         if self.TimeID == timeID:
             SameID = True
-            return indicator, Brought, Sold, closePrice, SameID, OverID
+            return indicator, Brought, Sold, closePrice, SameID
         
         if self.RiseFlag == True:
             if timeID >= self.ChomoTime:
@@ -965,22 +975,18 @@ class CmUnit:
                 Sold = True
             elif lastMacd > self.GMacdSP:
                 self.GMacdSP = lastMacd
-        return indicator, Brought, Sold, closePrice, SameID, OverID
+        return indicator, Brought, Sold, closePrice, SameID
 
     def CmCoreWithoutMustSignal(self):
         CanBuy = False
         Brought = False
         Sold = False
         SameID = False
-        OverID = False
         indicator,timeID,closePrice,lastMacd,lastSlowMA,stdMA= CMMACD.CmIndicator(self.Data)
-        if timeID > self.LimitID:
-            OverID = True
-            return indicator, Brought, Sold, closePrice, SameID, OverID
 
         if self.TimeID == timeID:
             SameID = True
-            return indicator, Brought, Sold, closePrice, SameID, OverID
+            return indicator, Brought, Sold, closePrice, SameID
         
         if self.RiseFlag == True:
             if timeID >= self.ChomoTime:
@@ -1012,7 +1018,7 @@ class CmUnit:
                 Sold = True
             elif lastMacd > self.GMacdSP:
                 self.GMacdSP = lastMacd
-        return indicator, Brought, Sold, closePrice, SameID, OverID
+        return indicator, Brought, Sold, closePrice, SameID
 
     def GenMustSignal(self, data, prevFastMA, preSlowMA, prevMA30):
         df = pd.DataFrame(data)
