@@ -252,7 +252,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                         HighCollection = "HB-%s-%s"%(highUnit.Symbol,highUnit.Period)
                         highUnit.Data = highUnit.Data[1:]
                         highUnit.Data.append(doc)
-                        indicator, Brought, Sold, closePrice, SameID, OverID = highUnit.CmCoreOnePage()
+                        indicator, Brought, Sold, closePrice, SameID, OverID = highUnit.CmCoreWithoutMustSignal()
                         if SameID == True:
                             outStr = "%s, %s, Warning: Found SameID!"%(timeNow, HighCollection)
                             print(outStr, file=f)
@@ -326,7 +326,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                 for doc in DBcursor:
                     highUnit.Data = highUnit.Data[1:]
                     highUnit.Data.append(doc)
-                indicator, Brought, Sold, closePrice, SameID, OverID = highUnit.CmCoreOnePage()
+                indicator, Brought, Sold, closePrice, SameID, OverID = highUnit.CmCoreWithoutMustSignal()
                 if SameID == True:
                     print("continue")
                     continue
@@ -764,7 +764,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
             for doc in DBcursor:
                 CmU4h.Data = CmU4h.Data[1:]
                 CmU4h.Data.append(doc)
-            indicator, Brought, Sold, closePrice, SameID, OverID = CmU4h.CmCoreOnePage()
+            indicator, Brought, Sold, closePrice, SameID, OverID = CmU4h.CmCoreWithoutMustSignal()
             if SameID == True:
                 print("continue")
                 continue
@@ -962,6 +962,53 @@ class CmUnit:
                 self.Money = self.Amount * closePrice * 0.998
                 self.Amount = 0
                 self.MustSell = False
+                Sold = True
+            elif lastMacd > self.GMacdSP:
+                self.GMacdSP = lastMacd
+        return indicator, Brought, Sold, closePrice, SameID, OverID
+
+    def CmCoreWithoutMustSignal(self):
+        CanBuy = False
+        Brought = False
+        Sold = False
+        SameID = False
+        OverID = False
+        indicator,timeID,closePrice,lastMacd,lastSlowMA,stdMA= CMMACD.CmIndicator(self.Data)
+        if timeID > self.LimitID:
+            OverID = True
+            return indicator, Brought, Sold, closePrice, SameID, OverID
+
+        if self.TimeID == timeID:
+            SameID = True
+            return indicator, Brought, Sold, closePrice, SameID, OverID
+        
+        if self.RiseFlag == True:
+            if timeID >= self.ChomoTime:
+                CanBuy = True
+        
+        if self.RiseFlag == False:
+            if timeID <= self.ChomoTime:
+                CanBuy = True
+        
+        self.TimeID = timeID
+        if indicator == "buy":
+            if CanBuy and not self.BPLock and (self.GMacdSP-lastMacd)/lastSlowMA > stdMA:
+                self.BPLock = True
+                self.SPLock = False
+                self.GMacdBP = lastMacd
+                self.Amount = self.Money / closePrice * 0.998
+                self.Money = 0
+                Brought = True
+            elif lastMacd < self.GMacdBP:
+                self.GMacdBP = lastMacd
+
+        if indicator == "sell":
+            if  not self.SPLock and (lastMacd-self.GMacdBP)/lastSlowMA > stdMA:
+                self.SPLock = True
+                self.BPLock = False
+                self.GMacdSP = lastMacd
+                self.Money = self.Amount * closePrice * 0.998
+                self.Amount = 0
                 Sold = True
             elif lastMacd > self.GMacdSP:
                 self.GMacdSP = lastMacd
