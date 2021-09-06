@@ -220,6 +220,85 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                         gMacdSPList[idx] = lastMacd
                 f.close()
 
+    def RunV3(self, symbols, baseWindowLen=400, basePeriod="30min", highPeriod="4hour"):
+        'V3 is conservative. \
+         When higher K candle suffered a down cm cross, V3 will wait and only could do SELL action'        
+        baseUnits = []
+        highUnits = []
+        for idx in range(len(symbols)):
+            CmUBase = CmUnit(symbols[idx], basePeriod, baseWindowLen, False, True, -999999, 999999, False, False, 0, 0, 0)
+            CmUHigh = CmUnit(symbols[idx], highPeriod, baseWindowLen/8, False, True, -999999, 999999, False, False, 0, 0, 0)
+            baseUnits.append(CmUBase)
+            highUnits.append(CmUHigh)
+        
+        self.InitMoedlV3(symbols, baseUnits, highUnits)
+
+    def InitMoedlV3(self, symbols, baseUnits, highUnits):
+        for idx in range(len(symbols)):
+            f = open('out.log','a+')
+            baseUnit = baseUnits[idx]
+            highUnit = highUnits[idx]
+
+            BaseData = []
+            collection = "HB-%s-%s"%(baseUnit.Symbol, baseUnit.Period)
+            baseUnit.SetCollection(self.DB[collection])
+            BaseCount = baseUnit.Collection.find().sort('id', pymongo.ASCENDING).count()
+            DBcursorAll = baseUnit.Collection.find().sort('id', pymongo.ASCENDING)
+            for doc in DBcursorAll:
+                BaseData.append(doc)
+            baseUnit.SetData(BaseData[:baseUnit.WindowLen])
+
+            HighData = []
+            collection = "HB-%s-%s"%(highUnit.Symbol, highUnit.Period)
+            highUnit.SetCollection(self.DB[collection])
+            HighCount = highUnit.Collection.find().sort('id', pymongo.ASCENDING).count()
+            DBcursorAll = highUnit.Collection.find().sort('id', pymongo.ASCENDING)
+            for docAll in DBcursorAll:
+                HighData.append(docAll)
+            highUnit.SetData(HighData[:highUnit.WindowLen])
+
+            # loop
+            j = baseUnit.WindowLen
+            for i in range(HighCount - highUnit.WindowLen):
+                DBcursor = highUnit.Collection.find().sort('id', pymongo.ASCENDING).skip(i+highUnit.WindowLen).limit(1)
+                for doc in DBcursor:
+                    highUnit.Data = highUnit.Data[1:]
+                    highUnit.Data.append(doc)
+                indicator, Brought, Sold, closePrice, SameID, OverID = highUnit.CmCoreOnePage()
+                if SameID == True:
+                    print("continue")
+                    continue
+                date = datetime.datetime.fromtimestamp(highUnit.TimeID).strftime('%Y-%m-%d %H:%M:%S')
+                if Brought == True:
+                    print("%s, 4hour buy point found,  ts: %d, close: %f, amount: %f,    round: %d/%d"%(date, highUnit.TimeID, closePrice, highUnit.Amount, i+1, HighCount-highUnit.WindowLen), file = f)
+                    baseUnit.RiseFlag = True
+                    baseUnit.ChomoTime = highUnit.TimeID
+                if Sold == True:
+                    print("%s, 4hour sell point found, ts: %d, close: %f, Money:  %f, round: %d/%d"%(date, highUnit.TimeID, closePrice, highUnit.Money, i+1, HighCount-highUnit.WindowLen), file = f)
+                    baseUnit.RiseFlag = False
+                    baseUnit.ChomoTime = highUnit.TimeID
+                
+                while j < BaseCount:
+                    DBcursor = baseUnit.Collection.find().sort('id', pymongo.ASCENDING).skip(j).limit(1)
+                    for doc in DBcursor:
+                        baseUnit.Data = baseUnit.Data[1:]
+                        baseUnit.Data.append(doc)
+                    baseUnit.LimitID = highUnit.TimeID
+                    indicator, Brought, Sold, closePrice, SameID, OverID = baseUnit.CmCoreOnePage()
+                    if SameID == True:
+                        continue
+                    if OverID:
+                        break
+                    date = datetime.datetime.fromtimestamp(baseUnit.TimeID).strftime('%Y-%m-%d %H:%M:%S')
+                    if Brought == True:
+                        print("%s, buy, indicator: %s, ts: %d, close: %f, amount: %f,    round: %d/%d"%(date, indicator, baseUnit.TimeID, closePrice, baseUnit.Amount, j+1, BaseCount), file = f)
+                    if Sold == True:
+                        print("%s, sell, indicator: %s, ts: %d, close: %f, Money:  %f, round: %d/%d"%(date, indicator, baseUnit.TimeID, closePrice, baseUnit.Money, j+1, BaseCount), file = f)
+                    j += 1
+            print("%s initially done. BPLock: %r, SPLock: %r, mustBuy: %r, mustSell: %r, gMacdBP: %f, gMacdSP: %f, timeID: %d, prevFastMA: %f, preSlowMA: %f, prevMA30: %f" \
+                 %(collection, baseUnit.BPLock, baseUnit.SPLock, baseUnit.MustBuy, baseUnit.MustSell, baseUnit.GMacdBP, baseUnit.GMacdSP, baseUnit.TimeID, baseUnit.PrevFastMA, baseUnit.PreSlowMA, baseUnit.PrevMA30), file = f)
+            f.close()
+
     def getAccountBalance(self, currency):
         'get currency balance'
         balance = chomoClient.client.GetAccountBalance(currency)
@@ -393,6 +472,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
         # regardless of the initial window
         # loop
         # mid = True
+        f = open('bt5min.log','a+')
         for i in range(tCount-windowLen):
             DBcursor = self.Collection.find().sort('id', pymongo.ASCENDING).skip(i+windowLen).limit(1)
             for doc in DBcursor:
@@ -405,6 +485,9 @@ class CmMacd(strategy.baseObj.baseObjSpot):
             slowMA = builtIndicators.ma.EMA(close,10)
             MA30 = builtIndicators.ma.EMA(close,30)
             std30 = np.std(close-MA30)
+            date = datetime.datetime.fromtimestamp(timeID).strftime('%Y-%m-%d %H:%M:%S')
+            #print("%s indicator: %s, ts: %d, Money:%f, Amount:%f, mustBuy:%r, mustSell:%r, BPMAUsed:%r, SPMAUsed:%r, gMacdBP:%f, gMacdSP:%f, lastMacd:%f, lastSlowMA:%f, stdMA:%f" \
+            #    %(date, indicator, timeID, Money,amount, mustBuy, mustSell, BPMAUsed, SPMAUsed, gMacdBP, gMacdSP, lastMacd, lastSlowMA, stdMA), file=f)
             if indicator == "nothing" : #and mid
                 if mustBuy and Money > 0:
                     gMacdBP = lastMacd # optional
@@ -417,7 +500,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                     TradePrice = closePrice
                     dataBP.append(closePrice)
                     timeBP.append(timeID)
-                    print("buy normal point found,  ts: %d, close: %f, amount: %f,    round: %d/%d"%(timeID, closePrice,amount, i+1, tCount-windowLen))
+                    print("%s buy normal point found,  ts: %d, close: %f, amount: %f,    round: %d/%d"%(date, timeID, closePrice,amount, i+1, tCount-windowLen), file=f)
                     #mid = False
                 elif mustSell and amount>0:
                     gMacdSP = lastMacd # optional
@@ -430,7 +513,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                     TradePrice = closePrice
                     dataSP.append(closePrice)
                     timeSP.append(timeID)
-                    print("sell normal point found, ts: %d, close: %f, Money:  %f, round: %d/%d"%(timeID, closePrice,Money,i+1, tCount-windowLen))
+                    print("%s sell normal point found, ts: %d, close: %f, Money:  %f, round: %d/%d"%(date, timeID, closePrice,Money,i+1, tCount-windowLen), file=f)
                     #mid = False
 
             if indicator == "buy":
@@ -447,6 +530,8 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                 prevFastMA = curFastMA
                 preSlowMA = curSlowMA
                 prevMA30 = curMA30
+                print("%s indicator: buy, ts: %d, close:%f, Money:%f, Amount:%f, mustBuy:%r, mustSell:%r, BPMAUsed:%r, SPMAUsed:%r, gMacdBP:%f, gMacdSP:%f, lastMacd:%f, lastSlowMA:%f, stdMA:%f, round: %d/%d" \
+                    %(date, timeID, closePrice, Money, amount, mustBuy, mustSell, BPMAUsed, SPMAUsed, gMacdBP, gMacdSP, lastMacd, lastSlowMA, stdMA, i+1, tCount-windowLen), file=f)
                 if not mustSell and ((mustBuy and Money>0) or (not BPMAUsed and ((gMacdSP-lastMacd)/lastSlowMA > stdMA))): # or (dangerous and Money>0)
                     BPMAUsed = True
                     SPMAUsed = False
@@ -457,7 +542,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                     TradePrice = closePrice
                     dataBP.append(closePrice)
                     timeBP.append(timeID)
-                    print("buy point found,  ts: %d, close: %f, amount: %f,    round: %d/%d"%(timeID, closePrice,amount, i+1, tCount-windowLen))
+                    print("%s brought, ts: %d, close: %f, Money:  %f, round: %d/%d"%(date, timeID, closePrice,Money,i+1, tCount-windowLen), file=f)
                 elif lastMacd < gMacdBP:
                     gMacdBP = lastMacd
                 dangerous = False
@@ -477,29 +562,33 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                 prevMA30 = curMA30
                 # if mustBuy:
                 #     mid = True
+                print("%s indicator: sell, ts: %d, close:%f, Money:%f, Amount:%f, mustBuy:%r, mustSell:%r, BPMAUsed:%r, SPMAUsed:%r, gMacdBP:%f, gMacdSP:%f, lastMacd:%f, lastSlowMA:%f, stdMA:%f, round: %d/%d"\
+                    %(date, timeID, closePrice, Money, amount, mustBuy, mustSell, BPMAUsed, SPMAUsed, gMacdBP, gMacdSP, lastMacd, lastSlowMA, stdMA, i+1, tCount-windowLen), file=f)
                 if not mustBuy and ((mustSell and amount>0) or (not SPMAUsed and ((lastMacd-gMacdBP)/lastSlowMA > stdMA))): # or (dangerous and amount>0)
                     SPMAUsed = True
                     BPMAUsed = False
                     mustSell = False
                     gMacdSP = lastMacd
                     if TradePrice == 0:
-                        print("first point is sell, do nothing")
+                        print("first point is sell, do nothing", file=f)
                     else:
                         Money = amount * closePrice * 0.998
                         amount = 0
                         TradePrice = closePrice
                         dataSP.append(closePrice)
                         timeSP.append(timeID)
-                        print("sell point found, ts: %d, close: %f, Money:  %f, round: %d/%d"%(timeID, closePrice,Money,i+1, tCount-windowLen))
+                        print("%s sold, ts: %d, close: %f, Money:  %f, round: %d/%d"%(date, timeID, closePrice,Money,i+1, tCount-windowLen), file=f)
                 elif lastMacd > gMacdSP:
                     gMacdSP = lastMacd
                 dangerous = False
                 #prevMacd = lastMacd
+        
         if Money == 0:
             RateOfReturn = TradePrice * amount / 10000.0 - 1.0
         elif amount == 0:
             RateOfReturn = Money / 10000.0 - 1.0
-        print("Rate of Return in %s is %f"%(symbol, RateOfReturn))
+        print("Rate of Return in %s is %f"%(symbol, RateOfReturn), file=f)
+        f.close()
 
         fastMA = builtIndicators.ma.EMA(closeAll,12)
         slowMA = builtIndicators.ma.EMA(closeAll,26)
@@ -571,12 +660,12 @@ class CmMacd(strategy.baseObj.baseObjSpot):
         timeSP = []
         dataBP = []
         dataSP = []
-        CmU30min = CmUnit(False, True, -999999, 999999, False, False, 0, 0, 0)
+        CmU30min = CmUnit("btcusdt", "30min", 400, False, True, -999999, 999999, False, False, 0, 0, 0)
         timeBP4h = []
         timeSP4h = []
         dataBP4h = []
         dataSP4h = []
-        CmU4h = CmUnit(False, True, -999999, 999999, False, False, 0, 0, 0)
+        CmU4h = CmUnit("btcusdt", "4hour", 50, False, True, -999999, 999999, False, False, 0, 0, 0)
         
 
         dataAll = []
@@ -711,7 +800,10 @@ class InitVals:
         self.PrevMA30 = prevMA30
 
 class CmUnit:
-    def __init__(self, BPLock, SPLock, GMacdBP, GMacdSP, MustBuy, MustSell, PrevFastMA, PreSlowMA, PrevMA30):
+    def __init__(self, symbol, period, winLen, BPLock, SPLock, GMacdBP, GMacdSP, MustBuy, MustSell, PrevFastMA, PreSlowMA, PrevMA30):
+        self.Symbol = symbol
+        self.Period = period
+        self.WindowLen = int(winLen)
         self.BPLock = BPLock
         self.SPLock = SPLock
         self.RiseFlag = True

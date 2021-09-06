@@ -8,3 +8,4 @@ symbol = "btcusdt"
 symbols = ["btcusdt"]
 #cm5.BT5min(300,symbol)
 cm5.CMTest(300,symbol)
+#cm5.RunV3(symbols, 300)
