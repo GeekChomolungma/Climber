@@ -234,8 +234,6 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                 f = open('out.log','a+')
                 timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 baseUnit = baseUnits[idx]
-                outStr = "%s HB-%s check once"%(timeNow, baseUnit.Symbol)
-                print(outStr, file=f)
 
                 # check new candle updated.                    
                 DBcursor = baseUnit.Collection.find().sort('id', pymongo.DESCENDING).limit(1)
@@ -253,9 +251,13 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                         if Sold == True:
                             action = "Sold   "
                             self.AlarmAndAction(BaseCollection, baseUnit.Symbol, baseUnit.Period, "sell", f)
-                        outStr = "%s, %s, %s, indicator:%s, ts: %d, BPLock: %r, SPLock: %r, mustBuy: %r, mustSell: %r, gMacdBP: %f, gMacdSP: %f, timeID: %d, prevFastMA: %f, preSlowMA: %f, prevMA30: %f" \
+                        outStr = "%s %s %s, indicator:%s, ts: %d, BPLock: %r, SPLock: %r, mustBuy: %r, mustSell: %r, gMacdBP: %f, gMacdSP: %f, timeID: %d, prevFastMA: %f, preSlowMA: %f, prevMA30: %f" \
                             %(timeNow, BaseCollection, action, indicator, baseUnit.TimeID, baseUnit.BPLock, baseUnit.SPLock, baseUnit.MustBuy, baseUnit.MustSell, baseUnit.GMacdBP, baseUnit.GMacdSP, baseUnit.TimeID, baseUnit.PrevFastMA, baseUnit.PreSlowMA, baseUnit.PrevMA30)
                         print(outStr, file = f)
+                    else:
+                        outStr = "%s HB-%s check once: ts: %d, BPLock: %r, SPLock: %r, mustBuy: %r, mustSell: %r, gMacdBP: %f, gMacdSP: %f, timeID: %d, prevFastMA: %f, preSlowMA: %f, prevMA30: %f"\
+                            %(timeNow, baseUnit.Symbol, baseUnit.TimeID, baseUnit.BPLock, baseUnit.SPLock, baseUnit.MustBuy, baseUnit.MustSell, baseUnit.GMacdBP, baseUnit.GMacdSP, baseUnit.TimeID, baseUnit.PrevFastMA, baseUnit.PreSlowMA, baseUnit.PrevMA30)
+                        print(outStr, file=f)
                 f.close()
         
     def RunV3(self, symbols, baseWindowLen=400, basePeriod="30min", highPeriod="4hour"):
