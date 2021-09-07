@@ -235,30 +235,37 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                 timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 baseUnit = baseUnits[idx]
 
-                # check new candle updated.                    
-                DBcursor = baseUnit.Collection.find().sort('id', pymongo.DESCENDING).limit(1)
-                for doc in DBcursor:
-                    if doc["id"] > baseUnit.Data[len(baseUnit.Data)-1]["id"]:
-                        # base level updated
-                        BaseCollection = "HB-%s-%s"%(baseUnit.Symbol,baseUnit.Period)
-                        action = "nill   "
-                        baseUnit.Data = baseUnit.Data[1:]
-                        baseUnit.Data.append(doc)
-                        indicator, Brought, Sold, closePrice = baseUnit.CmCoreOnePage()
-                        if Brought == True:
-                            action = "Brought"
-                            self.AlarmAndAction(BaseCollection, baseUnit.Symbol, baseUnit.Period, "buy", f)
-                        if Sold == True:
-                            action = "Sold   "
-                            self.AlarmAndAction(BaseCollection, baseUnit.Symbol, baseUnit.Period, "sell", f)
-                        outStr = "%s %s %s, indicator:%s, ts: %d, BPLock: %r, SPLock: %r, mustBuy: %r, mustSell: %r, gMacdBP: %f, gMacdSP: %f, timeID: %d, prevFastMA: %f, preSlowMA: %f, prevMA30: %f" \
-                            %(timeNow, BaseCollection, action, indicator, baseUnit.TimeID, baseUnit.BPLock, baseUnit.SPLock, baseUnit.MustBuy, baseUnit.MustSell, baseUnit.GMacdBP, baseUnit.GMacdSP, baseUnit.TimeID, baseUnit.PrevFastMA, baseUnit.PreSlowMA, baseUnit.PrevMA30)
-                        print(outStr, file = f)
-                    else:
-                        outStr = "%s HB-%s check once: ts: %d, BPLock: %r, SPLock: %r, mustBuy: %r, mustSell: %r, gMacdBP: %f, gMacdSP: %f, timeID: %d, prevFastMA: %f, preSlowMA: %f, prevMA30: %f"\
-                            %(timeNow, baseUnit.Symbol, baseUnit.TimeID, baseUnit.BPLock, baseUnit.SPLock, baseUnit.MustBuy, baseUnit.MustSell, baseUnit.GMacdBP, baseUnit.GMacdSP, baseUnit.TimeID, baseUnit.PrevFastMA, baseUnit.PreSlowMA, baseUnit.PrevMA30)
-                        print(outStr, file=f)
-                f.close()
+                # check new candle updated.
+                try:                    
+                    DBcursor = baseUnit.Collection.find().sort('id', pymongo.DESCENDING).limit(1)
+                except:
+                    errStr = "%s Error: HB-%s DB Connection failed"%(timeNow, baseUnit.Symbol)
+                    print(errStr, file=f)
+                    f.close()
+                    continue
+                else:
+                    for doc in DBcursor:
+                        if doc["id"] > baseUnit.Data[len(baseUnit.Data)-1]["id"]:
+                            # base level updated
+                            BaseCollection = "HB-%s-%s"%(baseUnit.Symbol,baseUnit.Period)
+                            action = "nill   "
+                            baseUnit.Data = baseUnit.Data[1:]
+                            baseUnit.Data.append(doc)
+                            indicator, Brought, Sold, closePrice = baseUnit.CmCoreOnePage()
+                            if Brought == True:
+                                action = "Brought"
+                                self.AlarmAndAction(BaseCollection, baseUnit.Symbol, baseUnit.Period, "buy", f)
+                            if Sold == True:
+                                action = "Sold   "
+                                self.AlarmAndAction(BaseCollection, baseUnit.Symbol, baseUnit.Period, "sell", f)
+                            outStr = "%s %s %s, indicator:%s, ts: %d, BPLock: %r, SPLock: %r, mustBuy: %r, mustSell: %r, gMacdBP: %f, gMacdSP: %f, timeID: %d, prevFastMA: %f, preSlowMA: %f, prevMA30: %f" \
+                                %(timeNow, BaseCollection, action, indicator, baseUnit.TimeID, baseUnit.BPLock, baseUnit.SPLock, baseUnit.MustBuy, baseUnit.MustSell, baseUnit.GMacdBP, baseUnit.GMacdSP, baseUnit.TimeID, baseUnit.PrevFastMA, baseUnit.PreSlowMA, baseUnit.PrevMA30)
+                            print(outStr, file = f)
+                        else:
+                            outStr = "%s HB-%s check once: ts: %d, BPLock: %r, SPLock: %r, mustBuy: %r, mustSell: %r, gMacdBP: %f, gMacdSP: %f, timeID: %d, prevFastMA: %f, preSlowMA: %f, prevMA30: %f"\
+                                %(timeNow, baseUnit.Symbol, baseUnit.TimeID, baseUnit.BPLock, baseUnit.SPLock, baseUnit.MustBuy, baseUnit.MustSell, baseUnit.GMacdBP, baseUnit.GMacdSP, baseUnit.TimeID, baseUnit.PrevFastMA, baseUnit.PreSlowMA, baseUnit.PrevMA30)
+                            print(outStr, file=f)
+                    f.close()
         
     def RunV3(self, symbols, baseWindowLen=400, basePeriod="30min", highPeriod="4hour"):
         'V3 is conservative. \
