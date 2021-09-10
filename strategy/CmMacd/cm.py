@@ -341,9 +341,10 @@ class CmMacd(strategy.baseObj.baseObjSpot):
         MACD = fastMA - slowMA
         signal = builtIndicators.ma.SMA(MACD,9)
         hist = MACD - signal
-        fig, (ax1, ax2, ax3) = plt.subplots(3,1,sharex=True,figsize=(8,12))
+        fig, (ax1, ax2, ax3) = plt.subplots(3,1,sharex=True,figsize=(8,12), facecolor="gray")
         fastMAAll = builtIndicators.ma.EMA(closeAll,5)
         slowMAAll = builtIndicators.ma.EMA(closeAll,10)
+        #ax1.set_facecolor('dimgrey')
         ax1.plot(timeAll, closeAll, color='gray', label="close")
         ax1.plot(timeAll, fastMAAll, color='y', label="MA30")
         ax1.plot(timeAll, slowMAAll, color='g', label="MA30")
@@ -351,6 +352,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
         ax1.scatter(timeBPA,dataBPA,marker='^',c='g',edgecolors='g')
         ax1.scatter(timeSPA,dataSPA,marker='v',c='r',edgecolors='r')
 
+        #ax2.set_facecolor('dimgrey')
         ax2.plot(timeAll, closeAll, color='gray', label="close")
         ax2.scatter(timeBP,dataBP,marker='o',c='w',edgecolors='g')
         ax2.scatter(timeSP,dataSP,marker='o',c='m',edgecolors='m')
@@ -361,6 +363,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
         crossSell = [signal[ci] for ci in crossIndexSell]
         crossTimesBuy = [timeAll[ci] for ci in crossIndexBuy]
         crossBuy = [signal[ci] for ci in crossIndexBuy]
+        #ax3.set_facecolor('dimgrey')
         ax3.plot(timeAll, MACD, label="MACD")
         ax3.plot(timeAll, signal, label="signal")
         ax3.scatter(crossTimesSell,crossSell,marker='o',c='r',edgecolors='r')
