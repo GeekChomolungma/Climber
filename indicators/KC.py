@@ -1,8 +1,6 @@
-from re import I
 import sys
-
-from numpy.core.numeric import NaN
 sys.path.append('..')
+from numpy.core.numeric import NaN
 import builtIndicators
 import pandas as pd
 import numpy as np
