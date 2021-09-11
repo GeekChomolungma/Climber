@@ -321,7 +321,7 @@ class CmMacd(strategy.baseObj.baseObjSpot):
                     print("%s, HB-%s-%s, Sold,    indicator: %s, ts: %d, close: %f, Money:  %f, round: %d/%d"%(date, baseUnit.Symbol, baseUnit.Period, indicator, baseUnit.TimeID, closePrice, baseUnit.Money, i+baseUnit.WindowLen, BaseCount), file = f)
         RateOfReturn = 0.0
         if baseUnit.Money == 0:
-            RateOfReturn = doc["close"] * baseUnit.amount / MoneyInitial - 1.0
+            RateOfReturn = doc["close"] * baseUnit.Amount / MoneyInitial - 1.0
         elif baseUnit.Amount == 0:
             RateOfReturn = baseUnit.Money / MoneyInitial - 1.0
         print("%s back test done. Rate of Return:%f" \
