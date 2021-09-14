@@ -8,10 +8,15 @@ import pandas as pd
 from scipy.stats import linregress
 import numpy as np
 import matplotlib.pyplot as plt
+import time
 
 class stateMachine():
-    def __init__(self):
-        print()
+    'for squeeze state'
+    def __init__(self, TimeID, Val, scolor, bcolor):
+        self.timeID = TimeID
+        self.val = Val
+        self.scolor = scolor
+        self.bcolor = bcolor
 
 class SqueezeUnit(strategy.baseObj.baseObjSpot):
     def __init__(self, DB_URL, db, symbol, period, winLen):
@@ -21,6 +26,7 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
         self.symbol = symbol
         self.period = period
         self.winLen = winLen
+        self.preState = stateMachine(0, 0, "blue", "black")
         dbCursor = self.Collection.find().sort('id', pymongo.ASCENDING).limit(self.winLen)
         self.data = list(dbCursor)
         print(self.data)
@@ -55,28 +61,59 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
         slope, intercept, r_value, p_value, std_err = linregress(np.arange(20), close[-20:] - diffAvgs[-20:])
         val = intercept + slope*19
         if val > 0:
-            if val > self.preVal:
+            if val > self.preState.val:
                 bcolor = "lime"
             else:
                 bcolor = "green"
         else:
-            if  val < self.preVal:
+            if  val < self.preState.val:
                 bcolor = "red"
             else:
                 bcolor = "maroon"
-        self.preVal = val
+        
         return time[-1:].values, val, scolor, bcolor
+    
+    def updatePreState(self, timeID, val, scolor, bcolor):
+        self.preState.timeID = timeID
+        self.preState.val = val
+        self.preState.scolor = scolor
+        self.preState.bcolor = bcolor
+        
+    def Run(self):
+        # init
+        dbCursor = self.Collection.find().sort('id', pymongo.DESCENDING).limit(300)
+        initData = list(dbCursor)
+        initData.reverse()
+        self.data = initData
+        timeID, val, scolor, bcolor = self.calcu()
+        self.updatePreState(timeID, val, scolor, bcolor)
+        
+        # loop
+        time.sleep(30.0)
+        dbCursor = self.Collection.find().sort('id', pymongo.DESCENDING).limit(1)
+        for doc in dbCursor:
+            if doc["id"] > self.preState.timeID:
+                self.data = self.data[1:]
+                self.data.append(doc)
+                timeID, val, scolor, bcolor = self.calcu()
+                if scolor == "gray" and self.preState.scolor == "black":
+                    # first gray cross in squeeze off after squeeze on.
+                    # check val
+                    if val > 0:
+                        up = True
+                    else:
+                        down = True
 
     def RunPlot(self):
         units = []
         dbCount = self.Collection.estimated_document_count()
         print("%s has %d items"%(self.collectionName, dbCount))
-        self.preVal = 0
         for i in range(dbCount-self.winLen):
             dbCursor = self.Collection.find().sort('id', pymongo.ASCENDING).skip(i + self.winLen).limit(1)
             self.data = self.data[1:]
             self.data.append(list(dbCursor)[0])
             timeID, val, scolor, bcolor = self.calcu()
+            self.updatePreState(timeID, val, scolor, bcolor)
             dic ={"id":timeID, "value":val, "scolor":scolor, "bcolor":bcolor}
             units.append(dic)
             print("%s, round: %d/%d"%(self.collectionName, i+self.winLen, dbCount))
