@@ -167,27 +167,27 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
         #     units.append(dic)
         #     print("%s, round: %d/%d"%(self.collectionName, i+self.winLen, dbCount))
         df = pd.DataFrame(units)
-        ax.bar(df["id"], df["value"], width=600, label="hist", alpha=0.2, color="gray")
+        ax.bar(df["id"], df["value"], width=self.Offset*0.75, label="hist", alpha=0.2, color="gray")
 
         limeVals = [dic for dic in units if dic["bcolor"] == "lime"]
         if len(limeVals)>0:
             dfLime = pd.DataFrame(limeVals)
-            ax.bar(dfLime["id"], dfLime["value"], width=600, label="hist", color="lime")
+            ax.bar(dfLime["id"], dfLime["value"], width=self.Offset*0.75, label="hist", color="lime")
 
         greenVals = [dic for dic in units if dic["bcolor"] == "green"]
         if len(greenVals)>0:
             dfgreen = pd.DataFrame(greenVals)
-            ax.bar(dfgreen["id"], dfgreen["value"], width=600, label="hist", color="green")
+            ax.bar(dfgreen["id"], dfgreen["value"], width=self.Offset*0.75, label="hist", color="green")
 
         redVals = [dic for dic in units if dic["bcolor"] == "red"]
         if len(redVals)>0:
             dfRed = pd.DataFrame(redVals)
-            ax.bar(dfRed["id"], dfRed["value"], width=600, label="hist", color="red")
+            ax.bar(dfRed["id"], dfRed["value"], width=self.Offset*0.75, label="hist", color="red")
 
         maroonVals = [dic for dic in units if dic["bcolor"] == "maroon"]
         if len(maroonVals)>0:
             dfMaroon = pd.DataFrame(maroonVals)
-            ax.bar(dfMaroon["id"], dfMaroon["value"], width=600, label="hist", color="maroon")
+            ax.bar(dfMaroon["id"], dfMaroon["value"], width=self.Offset*0.75, label="hist", color="maroon")
 
         blackCross = [dic for dic in units if dic["scolor"] == "black"]
         if len(blackCross)>0:
