@@ -9,6 +9,8 @@ from scipy.stats import linregress
 import numpy as np
 import matplotlib.pyplot as plt
 import time
+import bson
+import datetime
 
 class stateMachine():
     'for squeeze state'
@@ -22,15 +24,19 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
     def __init__(self, DB_URL, db, symbol, period, winLen):
         super(SqueezeUnit, self).__init__(DB_URL)
         self.collectionName = "HB-%s-%s"%(symbol, period)
-        super(SqueezeUnit, self).LoadDB(db, self.collectionName)
+        super(SqueezeUnit, self).LoadDB(db, self.collectionName, period)
         self.symbol = symbol
         self.period = period
         self.winLen = winLen
         self.preState = stateMachine(0, 0, "blue", "black")
         dbCursor = self.Collection.find().sort('id', pymongo.ASCENDING).limit(self.winLen)
         self.data = list(dbCursor)
-        print(self.data)
-        print("data lenght is %d"%(len(self.data)))
+        # first calcu
+        dbCursor = self.Collection.find().sort('id', pymongo.ASCENDING).limit(self.winLen)
+        initData = list(dbCursor)
+        self.data = initData
+        timeID, val, scolor, bcolor = self.calcu()
+        self.updatePreState(timeID, val, scolor, bcolor)
     
     def calcu(self):
         df = pd.DataFrame(self.data)
@@ -41,8 +47,8 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
         # cross
         upperKC, lowerKC = indicators.KC.KC(close, high, low)
         upperBB, lowerBB = indicators.BB.BB(close)
-        sqzOn  = ((lowerBB[-1:].values > lowerKC[-1:].values) and (upperBB[-1:].values < upperKC[-1:].values))
-        sqzOff = ((lowerBB[-1:].values < lowerKC[-1:].values) and (upperBB[-1:].values > upperKC[-1:].values))
+        sqzOn  = ((lowerBB[len(lowerBB)-1] > lowerKC[len(lowerKC)-1]) and (upperBB[len(upperBB)-1] < upperKC[len(upperKC)-1]))
+        sqzOff = ((lowerBB[len(lowerBB)-1] < lowerKC[len(lowerKC)-1]) and (upperBB[len(upperBB)-1] > upperKC[len(upperKC)-1]))
         noSqz  = ((sqzOn == False) and (sqzOff == False))
         if noSqz:
             scolor = "blue"
@@ -70,8 +76,7 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
                 bcolor = "red"
             else:
                 bcolor = "maroon"
-        
-        return time[-1:].values, val, scolor, bcolor
+        return time[len(time)-1], val, scolor, bcolor
     
     def updatePreState(self, timeID, val, scolor, bcolor):
         self.preState.timeID = timeID
@@ -80,82 +85,121 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
         self.preState.bcolor = bcolor
         
     def Run(self):
-        # init
-        dbCursor = self.Collection.find().sort('id', pymongo.DESCENDING).limit(300)
-        initData = list(dbCursor)
-        initData.reverse()
-        self.data = initData
-        timeID, val, scolor, bcolor = self.calcu()
-        self.updatePreState(timeID, val, scolor, bcolor)
-        
-        # loop
-        time.sleep(30.0)
-        dbCursor = self.Collection.find().sort('id', pymongo.DESCENDING).limit(1)
+        indicator = ""
+        curID = self.preState.timeID + self.Offset
+        count = self.Collection.count_documents({'id':bson.Int64(curID)})
+        if count == 0:
+            return False, indicator
+        dbCursor = self.Collection.find({"id":bson.Int64(curID)})
         for doc in dbCursor:
-            if doc["id"] > self.preState.timeID:
-                self.data = self.data[1:]
-                self.data.append(doc)
-                timeID, val, scolor, bcolor = self.calcu()
-                if scolor == "gray" and self.preState.scolor == "black":
-                    # first gray cross in squeeze off after squeeze on.
-                    # check val
-                    if val > 0:
-                        up = True
-                    else:
-                        down = True
-
-    def RunPlot(self):
-        units = []
-        dbCount = self.Collection.estimated_document_count()
-        print("%s has %d items"%(self.collectionName, dbCount))
-        for i in range(dbCount-self.winLen):
-            dbCursor = self.Collection.find().sort('id', pymongo.ASCENDING).skip(i + self.winLen).limit(1)
             self.data = self.data[1:]
-            self.data.append(list(dbCursor)[0])
+            self.data.append(doc)
             timeID, val, scolor, bcolor = self.calcu()
+            if bcolor == "green" and self.preState.bcolor == "lime":
+                indicator = "sell"
+            if bcolor == "maroon" and self.preState.bcolor == "red":
+                indicator = "buy"
+            self.close = doc["close"]
             self.updatePreState(timeID, val, scolor, bcolor)
-            dic ={"id":timeID, "value":val, "scolor":scolor, "bcolor":bcolor}
-            units.append(dic)
-            print("%s, round: %d/%d"%(self.collectionName, i+self.winLen, dbCount))
+            return True, indicator
+    
+    def BackTest(self):
+        Money = 10000.0
+        Amount = 0.0
+        RR = 0.0
+        buyID = []
+        buyData = []
+        sellID = []
+        sellData = []
+        DataAll = []
+
+        newTurn = True
+        while newTurn:
+            newTurn, indicator = self.Run()
+            dic ={"id":self.preState.timeID, "value":self.preState.val, "scolor":self.preState.scolor, "bcolor":self.preState.bcolor}
+            DataAll.append(dic)
+            date = datetime.datetime.fromtimestamp(self.preState.timeID).strftime('%Y-%m-%d %H:%M:%S')
+            if indicator == "sell":
+                if Amount != 0:
+                    Money = 0.998 * Amount * self.close
+                    Amount = 0
+                    print("%s %s Sell, close: %f, money: %f, amount: %f"%(date, self.collectionName, self.close, Money, Amount))
+                    sellID.append(self.preState.timeID)
+                    sellData.append(self.close)
+            
+            if indicator == "buy":
+                if Money != 0:
+                    Amount = 0.998 * Money / self.close
+                    Money = 0
+                    print("%s %s Sell, close: %f, money: %f, amount: %f"%(date, self.collectionName, self.close, Money, Amount))
+                    buyID.append(self.preState.timeID)
+                    buyData.append(self.close)
+                    
+
+        if Money != 0:
+            RR = (Money - 10000.0) / 10000.0
+        else:
+            RR = (Amount * self.close - 10000.0) / 10000.0
+        print("rate of return is: %f"%(RR))
+
+        #plot
+        fig, (ax1, ax2) = plt.subplots(2,1,sharex=True,figsize=(8,12))
+        cursor = self.Collection.find().sort('id', pymongo.ASCENDING)
+        dfAll = pd.DataFrame(list(cursor))
+        
+        ax1.plot(dfAll["id"], dfAll["close"], color='gray', label="close")
+        ax1.scatter(buyID,buyData,marker='^',c='g',edgecolors='g')
+        ax1.scatter(sellID,sellData,marker='v',c='r',edgecolors='r')
+        self.Plot(DataAll, ax2)
+        plt.show()
+
+    def Plot(self, units, ax):
+        # units = []
+        # dbCount = self.Collection.estimated_document_count()
+        # print("%s has %d items"%(self.collectionName, dbCount))
+        # for i in range(dbCount-self.winLen):
+        #     dbCursor = self.Collection.find().sort('id', pymongo.ASCENDING).skip(i + self.winLen).limit(1)
+        #     self.data = self.data[1:]
+        #     self.data.append(list(dbCursor)[0])
+        #     timeID, val, scolor, bcolor = self.calcu()
+        #     self.updatePreState(timeID, val, scolor, bcolor)
+        #     dic ={"id":timeID, "value":val, "scolor":scolor, "bcolor":bcolor}
+        #     units.append(dic)
+        #     print("%s, round: %d/%d"%(self.collectionName, i+self.winLen, dbCount))
         df = pd.DataFrame(units)
-        plt.bar(df["id"], df["value"], width=600, label="hist", alpha=0.2, color="gray")
+        ax.bar(df["id"], df["value"], width=600, label="hist", alpha=0.2, color="gray")
 
         limeVals = [dic for dic in units if dic["bcolor"] == "lime"]
         if len(limeVals)>0:
             dfLime = pd.DataFrame(limeVals)
-            plt.bar(dfLime["id"], dfLime["value"], width=600, label="hist", color="lime")
+            ax.bar(dfLime["id"], dfLime["value"], width=600, label="hist", color="lime")
 
         greenVals = [dic for dic in units if dic["bcolor"] == "green"]
         if len(greenVals)>0:
             dfgreen = pd.DataFrame(greenVals)
-            plt.bar(dfgreen["id"], dfgreen["value"], width=600, label="hist", color="green")
+            ax.bar(dfgreen["id"], dfgreen["value"], width=600, label="hist", color="green")
 
         redVals = [dic for dic in units if dic["bcolor"] == "red"]
         if len(redVals)>0:
             dfRed = pd.DataFrame(redVals)
-            plt.bar(dfRed["id"], dfRed["value"], width=600, label="hist", color="red")
+            ax.bar(dfRed["id"], dfRed["value"], width=600, label="hist", color="red")
 
         maroonVals = [dic for dic in units if dic["bcolor"] == "maroon"]
         if len(maroonVals)>0:
             dfMaroon = pd.DataFrame(maroonVals)
-            plt.bar(dfMaroon["id"], dfMaroon["value"], width=600, label="hist", color="maroon")
+            ax.bar(dfMaroon["id"], dfMaroon["value"], width=600, label="hist", color="maroon")
 
         blackCross = [dic for dic in units if dic["scolor"] == "black"]
         if len(blackCross)>0:
             dfBlack= pd.DataFrame(blackCross)
-            plt.scatter(dfBlack["id"], np.zeros(len(dfBlack["id"]), dtype=object), marker='+', color="black")
+            ax.scatter(dfBlack["id"], np.zeros(len(dfBlack["id"]), dtype=object), marker='+', color="black")
 
         grayCross = [dic for dic in units if dic["scolor"] == "gray"]
         if len(grayCross)>0:
             dfGray = pd.DataFrame(grayCross)
-            plt.scatter(dfGray["id"], np.zeros(len(dfGray["id"]), dtype=object), marker='+', color="gray")
+            ax.scatter(dfGray["id"], np.zeros(len(dfGray["id"]), dtype=object), marker='+', color="gray")
 
         blueCross = [dic for dic in units if dic["scolor"] == "blue"]
         if len(blueCross) > 0:
             dfBlue = pd.DataFrame(blueCross)
-            plt.scatter(dfBlue["id"], np.zeros(len(dfBlue["id"]), dtype=object), marker='+', color="blue")
-        plt.show()
-
-conn_str = "mongodb://market:admin123@139.196.155.97:27017"
-squ = SqueezeUnit(conn_str, "marketinfo", "btcusdt", "30min", 300)
-squ.RunPlot()
+            ax.scatter(dfBlue["id"], np.zeros(len(dfBlue["id"]), dtype=object), marker='+', color="blue")

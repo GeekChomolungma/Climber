@@ -11,10 +11,25 @@ class baseObjSpot:
         'init DB'
         self.MgoClient = pymongo.MongoClient(DB_URL,serverSelectionTimeoutMS=5000)
 
-    def LoadDB(self, db, collection):
+    def LoadDB(self, db, collection, period):
         'choose the db collection'
         self.DB = self.MgoClient[db]
         self.Collection = self.DB[collection]
+        # get offset of period: 1min, 5min, 15min, 30min, 60min, 4hour
+        if period == "1min":
+            self.Offset = 60
+        elif period == "5min":
+            self.Offset = 5 * 60
+        elif period == "15min":
+            self.Offset = 15 * 60
+        elif period == "30min":
+            self.Offset = 30 * 60
+        elif period == "60min":
+            self.Offset = 60 * 60
+        elif period == "4hour":
+            self.Offset = 240 * 60
+        else:
+            self.Offset = 60
 
     def Run(self,period):
         'use data to run strategy'
