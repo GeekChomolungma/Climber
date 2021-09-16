@@ -32,9 +32,6 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
         dbCursor = self.Collection.find().sort('id', pymongo.ASCENDING).limit(self.winLen)
         self.data = list(dbCursor)
         # first calcu
-        dbCursor = self.Collection.find().sort('id', pymongo.ASCENDING).limit(self.winLen)
-        initData = list(dbCursor)
-        self.data = initData
         timeID, val, scolor, bcolor = self.calcu()
         self.updatePreState(timeID, val, scolor, bcolor)
     
