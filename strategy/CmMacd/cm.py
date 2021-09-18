@@ -82,7 +82,7 @@ class CmUnit(strategy.baseObj.baseObjSpot):
         if indicator == "buy":
             up, down = self.GenMustSignal()
             self.MustSell = down
-            if not self.MustSell and not self.BPLock and ((self.MustBuy or (self.GMacdSP-lastMacd)/lastSlowMA > stdMA)):
+            if not self.MustSell and not self.BPLock and ((self.MustBuy or (self.GMacdSP-lastMacd)/lastSlowMA > 0.954*stdMA)):
                 self.BPLock = True
                 self.SPLock = False
                 self.GMacdBP = lastMacd
@@ -94,7 +94,7 @@ class CmUnit(strategy.baseObj.baseObjSpot):
         if indicator == "sell":
             up, down = self.GenMustSignal()
             self.MustBuy = up
-            if not self.MustBuy and not self.SPLock and (self.MustSell or (lastMacd-self.GMacdBP)/lastSlowMA > stdMA):
+            if not self.MustBuy and not self.SPLock and (self.MustSell or (lastMacd-self.GMacdBP)/lastSlowMA > 0.954*stdMA):
                 self.SPLock = True
                 self.BPLock = False
                 self.GMacdSP = lastMacd
