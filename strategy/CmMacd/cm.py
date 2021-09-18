@@ -48,7 +48,7 @@ class CmUnit(strategy.baseObj.baseObjSpot):
             for doc in dbCursor:
                 self.data = self.data[1:]
                 self.data.append(doc)
-                indicator, Brought, Sold, closePrice = self.CmCoreOnePage()
+                indicator, Brought, Sold, closePrice, lastMacd, lastSlowMA, stdMA = self.CmCoreOnePage()
                 date = datetime.datetime.fromtimestamp(self.TimeID).strftime('%Y-%m-%d %H:%M:%S')
                 if Brought == True:
                     print("%s %s Brought, indicator: %s, ts: %d, close: %f"%(date, self.collectionName, indicator, self.TimeID, closePrice), file = f)
@@ -61,7 +61,7 @@ class CmUnit(strategy.baseObj.baseObjSpot):
     def CmCoreOnePage(self):
         Brought = False
         Sold = False
-        indicator,timeID,closePrice,lastMacd,lastSlowMA,stdMA= CMMACD.CmIndicator(self.data)        
+        indicator,timeID,closePrice,lastMacd,lastSlowMA,stdMA = CMMACD.CmIndicator(self.data)        
         self.TimeID = timeID
         if indicator == "nothing" :
             if self.MustBuy and not self.BPLock:
@@ -102,7 +102,7 @@ class CmUnit(strategy.baseObj.baseObjSpot):
                 Sold = True
             elif lastMacd > self.GMacdSP:
                 self.GMacdSP = lastMacd
-        return indicator, Brought, Sold, closePrice
+        return indicator, Brought, Sold, closePrice, lastMacd, lastSlowMA, stdMA
 
     def CmCoreWithoutMustSignal(self):
         Brought = False
@@ -164,7 +164,7 @@ class CmUnit(strategy.baseObj.baseObjSpot):
     def AlarmAndAction(self, collection, symbol, period, indicator, outlog):
         timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         if indicator == "buy":
-            alertText = "%s HuoBi %s: will rise!!! buy now!"%(timeNow, collection)
+            alertText = "%s %s: will rise!!! buy now!"%(timeNow, collection)
             print(alertText,file=outlog)
             if symbol == "btcusdt":
                 self.Buy()
@@ -172,7 +172,7 @@ class CmUnit(strategy.baseObj.baseObjSpot):
                 text = "HuoBi %s-%s: 要涨了!!! 现在买入! 当前时间: %s, 报警提醒次数(%d/2)" %(symbol,period,timeNow,i+1)
                 alert.Alert(text)
         if indicator == "sell":
-            alertText = "%s HuoBi %s: will descend!!! sell quickly!"%(timeNow, collection)
+            alertText = "%s %s: will descend!!! sell quickly!"%(timeNow, collection)
             print(alertText,file=outlog)
             if symbol == "btcusdt":
                 self.Sell()
@@ -219,15 +219,15 @@ class CmUnit(strategy.baseObj.baseObjSpot):
                 action = "nill   "
                 self.data = self.data[1:]
                 self.data.append(doc)
-                indicator, Brought, Sold, closePrice = self.CmCoreOnePage()
+                indicator, Brought, Sold, closePrice, lastMacd, lastSlowMA, stdMA = self.CmCoreOnePage()
                 if Brought == True:
                     action = "Brought"
                     self.AlarmAndAction(self.collectionName, self.symbol, self.period, "buy", f)
                 if Sold == True:
                     action = "Sold   "
                     self.AlarmAndAction(self.collectionName, self.symbol, self.period, "sell", f)
-                outStr = "%s %s %s, indicator:%s, timeID: %d, BPLock: %r, SPLock: %r, mustBuy: %r, mustSell: %r, gMacdBP: %f, gMacdSP: %f, prevFastMA: %f, preSlowMA: %f, prevMA30: %f" \
-                    %(timeNow, self.collectionName, action, indicator, self.TimeID, self.BPLock, self.SPLock, self.MustBuy, self.MustSell, self.GMacdBP, self.GMacdSP, self.PrevFastMA, self.PreSlowMA, self.PrevMA30)
+                outStr = "%s %s %s indicator: %s, timeID: %d, BPLock: %r, SPLock: %r, mustBuy: %r, mustSell: %r, gMacdBP: %f, gMacdSP: %f, lastMacd:%f, lastSlowMA:%f, stdMA:%f, prevFastMA: %f, preSlowMA: %f, prevMA30: %f" \
+                    %(timeNow, self.collectionName, action, indicator, self.TimeID, self.BPLock, self.SPLock, self.MustBuy, self.MustSell, self.GMacdBP, self.GMacdSP, lastMacd, lastSlowMA, stdMA, self.PrevFastMA, self.PreSlowMA, self.PrevMA30)
                 print(outStr, file = f)
             f.close()
 
@@ -255,7 +255,7 @@ class CmUnit(strategy.baseObj.baseObjSpot):
             for doc in dbCursor:
                 self.data = self.data[1:]
                 self.data.append(doc)
-                indicator, Brought, Sold, closePrice = self.CmCoreOnePage()
+                indicator, Brought, Sold, closePrice, lastMacd, lastSlowMA, stdMA = self.CmCoreOnePage()
                 date = datetime.datetime.fromtimestamp(self.TimeID).strftime('%Y-%m-%d %H:%M:%S')
                 if indicator == "buy":
                     timeBPA.append(doc["id"])

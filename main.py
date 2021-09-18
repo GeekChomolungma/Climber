@@ -15,3 +15,4 @@ while True:
     time.sleep(30.0)
     for idx in range(len(symbols)):
         CmUnits[idx].RunOnce()
+        
