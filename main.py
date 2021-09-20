@@ -14,5 +14,10 @@ for symbol in symbols:
 while True:
     time.sleep(30.0)
     for idx in range(len(symbols)):
-        CmUnits[idx].RunOnce()
-        
+        indicator, Brought, Sold, closePrice = CmUnits[idx].RunOnce()
+        f = open('out.log','a+')
+        if Brought == True:
+            CmUnits[idx].AlarmAndAction(CmUnits[idx].collectionName, CmUnits[idx].symbol, CmUnits[idx].period, "buy", f)
+        if Sold == True:
+            CmUnits[idx].AlarmAndAction(CmUnits[idx].collectionName, CmUnits[idx].symbol, CmUnits[idx].period, "sell", f)
+        f.close()

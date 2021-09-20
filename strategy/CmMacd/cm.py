@@ -22,7 +22,9 @@ class CmUnit(strategy.baseObj.baseObjSpot):
         self.TimeID = 0
         self.BPLock = False
         self.SPLock = True
-        self.GMacdBP = 999999
+        self.PrevBP = -999999
+        self.PrevSP = 999999
+        self.GMacdBP = -999999
         self.GMacdSP = 999999
         self.MustBuy = False
         self.MustSell = False
@@ -40,72 +42,104 @@ class CmUnit(strategy.baseObj.baseObjSpot):
     def initModel(self):
         f = open('out.log','a+')
         while True:
-            curID = self.TimeID + self.Offset
-            count = self.Collection.count_documents({'id':bson.Int64(curID)})
-            if count == 0:
+            indicator, Bought, Sold, closePrice = self.RunOnce()
+            if indicator == "no new":
                 break
-            dbCursor = self.Collection.find({"id":bson.Int64(curID)})
-            for doc in dbCursor:
-                self.data = self.data[1:]
-                self.data.append(doc)
-                indicator, Brought, Sold, closePrice, lastMacd, lastSlowMA, stdMA = self.CmCoreOnePage()
-                date = datetime.datetime.fromtimestamp(self.TimeID).strftime('%Y-%m-%d %H:%M:%S')
-                if Brought == True:
-                    print("%s %s Brought, indicator: %s, ts: %d, close: %f"%(date, self.collectionName, indicator, self.TimeID, closePrice), file = f)
-                if Sold == True:
-                    print("%s %s Sold,    indicator: %s, ts: %d, close: %f"%(date, self.collectionName, indicator, self.TimeID, closePrice), file = f)
+            if indicator == "conn failed":
+                continue
+            date = datetime.datetime.fromtimestamp(self.TimeID).strftime('%Y-%m-%d %H:%M:%S')
+            if Bought == True:
+                print("%s %s Bought, indicator: %s, ts: %d, close: %f"%(date, self.collectionName, indicator, self.TimeID, closePrice), file = f)
+            if Sold == True:
+                print("%s %s Sold,   indicator: %s, ts: %d, close: %f"%(date, self.collectionName, indicator, self.TimeID, closePrice), file = f)
         print("%s initially done. BPLock: %r, SPLock: %r, mustBuy: %r, mustSell: %r, gMacdBP: %f, gMacdSP: %f, timeID: %d, prevFastMA: %f, preSlowMA: %f, prevMA30: %f" \
             %(self.collectionName, self.BPLock, self.SPLock, self.MustBuy, self.MustSell, self.GMacdBP, self.GMacdSP, self.TimeID, self.PrevFastMA, self.PreSlowMA, self.PrevMA30), file = f)
         f.close()
         
     def CmCoreOnePage(self):
-        Brought = False
+        Bought = False
         Sold = False
         indicator,timeID,closePrice,lastMacd,lastSlowMA,stdMA = CMMACD.CmIndicator(self.data)        
         self.TimeID = timeID
-        if indicator == "nothing" :
-            if self.MustBuy and not self.BPLock:
-                self.GMacdBP = lastMacd # optional
-                self.BPLock = True
-                self.SPLock = False
-                self.MustBuy = False
-                self.MustSell = False
-                Brought = True
-            elif self.MustSell and not self.SPLock:
+        # if indicator == "nothing" :
+        #     if self.MustBuy and not self.BPLock:
+        #         self.GMacdBP = lastMacd # optional
+        #         self.BPLock = True
+        #         self.SPLock = False
+        #         self.MustBuy = False
+        #         self.MustSell = False
+        #         Bought = True
+        #     elif self.MustSell and not self.SPLock:
+        #         self.GMacdSP = lastMacd # optional
+        #         self.SPLock = True
+        #         self.BPLock = False
+        #         self.MustSell = False
+        #         self.MustBuy = False
+        #         Sold = True
+
+        if indicator == "buy":
+            self.PrevBP = lastMacd
+            up, down = self.GenMustSignal()
+            self.MustSell = down
+            if self.MustSell and not self.SPLock:
+                # sell 1
                 self.GMacdSP = lastMacd # optional
                 self.SPLock = True
                 self.BPLock = False
                 self.MustSell = False
                 self.MustBuy = False
                 Sold = True
-
-        if indicator == "buy":
-            up, down = self.GenMustSignal()
-            self.MustSell = down
-            if not self.MustSell and not self.BPLock and ((self.MustBuy or (self.GMacdSP-lastMacd)/lastSlowMA > 0.954*stdMA)):
-                self.BPLock = True
-                self.SPLock = False
-                self.GMacdBP = lastMacd
-                self.MustBuy = False
-                Brought = True
-            elif lastMacd < self.GMacdBP:
-                self.GMacdBP = lastMacd
+            # elif lastMacd > self.PrevSP and lastMacd > 0 and not self.BPLock:
+            #     # buy 1
+            #     self.BPLock = True
+            #     self.SPLock = False
+            #     self.GMacdBP = lastMacd
+            #     self.MustBuy = False
+            #     Bought = True
+            else:
+                # buy 2              
+                if not self.MustSell and not self.BPLock and (self.MustBuy or (self.GMacdSP-lastMacd)/lastSlowMA > 0.954*stdMA):
+                    self.BPLock = True
+                    self.SPLock = False
+                    self.GMacdBP = lastMacd
+                    self.MustBuy = False
+                    Bought = True
+                elif lastMacd < self.GMacdBP:
+                    self.GMacdBP = lastMacd
 
         if indicator == "sell":
+            self.PrevSP = lastMacd
             up, down = self.GenMustSignal()
             self.MustBuy = up
-            if not self.MustBuy and not self.SPLock and (self.MustSell or (lastMacd-self.GMacdBP)/lastSlowMA > 0.954*stdMA):
-                self.SPLock = True
-                self.BPLock = False
-                self.GMacdSP = lastMacd
+            if self.MustBuy and not self.BPLock:
+                # buy 1
+                self.GMacdBP = lastMacd # optional
+                self.BPLock = True
+                self.SPLock = False
+                self.MustBuy = False
                 self.MustSell = False
-                Sold = True
-            elif lastMacd > self.GMacdSP:
-                self.GMacdSP = lastMacd
-        return indicator, Brought, Sold, closePrice, lastMacd, lastSlowMA, stdMA
+                Bought = True
+            # elif lastMacd < self.PrevBP and lastMacd < 0 and not self.SPLock:
+            #     # sell 1
+            #     self.SPLock = True
+            #     self.BPLock = False
+            #     self.GMacdSP = lastMacd
+            #     self.MustSell = False
+            #     Sold = True
+            else:
+                # sell 2
+                if not self.MustBuy and not self.SPLock and (self.MustSell or (lastMacd-self.GMacdBP)/lastSlowMA > 0.954*stdMA):
+                    self.SPLock = True
+                    self.BPLock = False
+                    self.GMacdSP = lastMacd
+                    self.MustSell = False
+                    Sold = True
+                elif lastMacd > self.GMacdSP:
+                    self.GMacdSP = lastMacd
+        return indicator, Bought, Sold, closePrice, lastMacd, lastSlowMA, stdMA
 
     def CmCoreWithoutMustSignal(self):
-        Brought = False
+        Bought = False
         Sold = False
         indicator,timeID,closePrice,lastMacd,lastSlowMA,stdMA= CMMACD.CmIndicator(self.data)
 
@@ -115,7 +149,7 @@ class CmUnit(strategy.baseObj.baseObjSpot):
                 self.BPLock = True
                 self.SPLock = False
                 self.GMacdBP = lastMacd
-                Brought = True
+                Bought = True
             elif lastMacd < self.GMacdBP:
                 self.GMacdBP = lastMacd
 
@@ -127,7 +161,7 @@ class CmUnit(strategy.baseObj.baseObjSpot):
                 Sold = True
             elif lastMacd > self.GMacdSP:
                 self.GMacdSP = lastMacd
-        return indicator, Brought, Sold, closePrice
+        return indicator, Bought, Sold, closePrice
 
     def GenMustSignal(self):
         df = pd.DataFrame(self.data)
@@ -196,6 +230,9 @@ class CmUnit(strategy.baseObj.baseObjSpot):
             print("But not enought btc, do not sell btc.")
     
     def RunOnce(self):
+        Bought = False
+        Sold = False
+        closePrice = 0
         f = open('out.log','a+')
         timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         # check new candle updated.
@@ -206,34 +243,35 @@ class CmUnit(strategy.baseObj.baseObjSpot):
                 outStr = "%s HB-%s check once: timeID: %d, BPLock: %r, SPLock: %r, mustBuy: %r, mustSell: %r, gMacdBP: %f, gMacdSP: %f, prevFastMA: %f, preSlowMA: %f, prevMA30: %f"\
                     %(timeNow, self.symbol, self.TimeID, self.BPLock, self.SPLock, self.MustBuy, self.MustSell, self.GMacdBP, self.GMacdSP, self.PrevFastMA, self.PreSlowMA, self.PrevMA30)
                 print(outStr, file=f)
-                return
+                return "no new", Bought, Sold, closePrice
             dbCursor = self.Collection.find({"id":bson.Int64(curID)})                    
         except:
             errStr = "%s Error: HB-%s DB Connection failed"%(timeNow, self.symbol)
             print(errStr, file=f)
             f.close()
-            return
+            return "conn failed", Bought, Sold, closePrice
         else:
             for doc in dbCursor:
                 # base level updated
-                action = "nill   "
+                action = "nill  "
                 self.data = self.data[1:]
                 self.data.append(doc)
-                indicator, Brought, Sold, closePrice, lastMacd, lastSlowMA, stdMA = self.CmCoreOnePage()
-                if Brought == True:
-                    action = "Brought"
-                    self.AlarmAndAction(self.collectionName, self.symbol, self.period, "buy", f)
+                indicator, Bought, Sold, closePrice, lastMacd, lastSlowMA, stdMA = self.CmCoreOnePage()
+                if Bought == True:
+                    action = "Bought"
                 if Sold == True:
-                    action = "Sold   "
-                    self.AlarmAndAction(self.collectionName, self.symbol, self.period, "sell", f)
+                    action = "Sold  "
                 outStr = "%s %s %s indicator: %s, timeID: %d, BPLock: %r, SPLock: %r, mustBuy: %r, mustSell: %r, gMacdBP: %f, gMacdSP: %f, lastMacd:%f, lastSlowMA:%f, stdMA:%f, prevFastMA: %f, preSlowMA: %f, prevMA30: %f" \
                     %(timeNow, self.collectionName, action, indicator, self.TimeID, self.BPLock, self.SPLock, self.MustBuy, self.MustSell, self.GMacdBP, self.GMacdSP, lastMacd, lastSlowMA, stdMA, self.PrevFastMA, self.PreSlowMA, self.PrevMA30)
                 print(outStr, file = f)
             f.close()
+            return indicator, Bought, Sold, closePrice
 
     def BackTest(self):
         Money = 10000.0
         Amount = 0.0
+        closePrice = 0
+        cp = 0
         f = open('cmTest.log','a+')
         BaseCount = self.Collection.find().sort('id', pymongo.ASCENDING).count()
         timeBP = [] 
@@ -246,35 +284,33 @@ class CmUnit(strategy.baseObj.baseObjSpot):
         dataSPA = []
         i = 0
         while True:
-            curID = self.TimeID + self.Offset
-            count = self.Collection.count_documents({'id':bson.Int64(curID)})
-            if count == 0:
+            i += 1 
+            indicator, Bought, Sold, cp = self.RunOnce()
+            if indicator == "no new" or indicator == "conn failed":
                 break
-            dbCursor = self.Collection.find({"id":bson.Int64(curID)})
-            i += 1
-            for doc in dbCursor:
-                self.data = self.data[1:]
-                self.data.append(doc)
-                indicator, Brought, Sold, closePrice, lastMacd, lastSlowMA, stdMA = self.CmCoreOnePage()
-                date = datetime.datetime.fromtimestamp(self.TimeID).strftime('%Y-%m-%d %H:%M:%S')
-                if indicator == "buy":
-                    timeBPA.append(doc["id"])
-                    dataBPA.append(doc["close"])
-                if indicator == "sell":
-                    timeSPA.append(doc["id"])
-                    dataSPA.append(doc["close"])
-                if Brought == True:
-                    Amount = Money / closePrice * 0.998
-                    Money = 0
-                    timeBP.append(doc["id"])
-                    dataBP.append(doc["close"])
-                    print("%s, HB-%s-%s, Brought, indicator: %s, ts: %d, close: %f, amount: %f, round: %d/%d"%(date, self.symbol, self.period, indicator, self.TimeID, closePrice, Amount, i+self.winLen, BaseCount), file = f)
-                if Sold == True:
-                    Money = Amount * closePrice * 0.998
-                    Amount = 0
-                    timeSP.append(doc["id"])
-                    dataSP.append(doc["close"])
-                    print("%s, HB-%s-%s, Sold,    indicator: %s, ts: %d, close: %f, Money:  %f, round: %d/%d"%(date, self.symbol, self.period, indicator, self.TimeID, closePrice, Money, i+self.winLen, BaseCount), file = f)
+            closePrice = cp
+            date = datetime.datetime.fromtimestamp(self.TimeID).strftime('%Y-%m-%d %H:%M:%S')
+            if indicator == "buy":
+                timeBPA.append(self.TimeID)
+                dataBPA.append(closePrice)
+            if indicator == "sell":
+                timeSPA.append(self.TimeID)
+                dataSPA.append(closePrice)
+            if Bought == True:
+                Amount = Money / closePrice * 0.998
+                Money = 0
+                timeBP.append(self.TimeID)
+                dataBP.append(closePrice)
+                print("%s, HB-%s-%s, Bought, indicator: %s, ts: %d, close: %f, amount: %f, round: %d/%d" \
+                    %(date, self.symbol, self.period, indicator, self.TimeID, closePrice, Amount, i+self.winLen, BaseCount), file = f)
+            if Sold == True:
+                Money = Amount * closePrice * 0.998
+                Amount = 0
+                timeSP.append(self.TimeID)
+                dataSP.append(closePrice)
+                print("%s, HB-%s-%s, Sold,   indicator: %s, ts: %d, close: %f, Money:  %f, round: %d/%d"% \
+                    (date, self.symbol, self.period, indicator, self.TimeID, closePrice, Money, i+self.winLen, BaseCount), file = f)
+
         RateOfReturn = 0.0
         if Money == 0:
             RateOfReturn = closePrice * Amount / 10000.0 - 1.0
