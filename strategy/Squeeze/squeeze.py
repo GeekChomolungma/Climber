@@ -14,11 +14,13 @@ import datetime
 
 class stateMachine():
     'for squeeze state'
-    def __init__(self, TimeID, Val, scolor, bcolor):
+    def __init__(self, TimeID, Val, slope, scolor, bcolor, slopeColor):
         self.timeID = TimeID
         self.val = Val
+        self.slope = slope
         self.scolor = scolor
         self.bcolor = bcolor
+        self.slopeColor = slopeColor
 
 class SqueezeUnit(strategy.baseObj.baseObjSpot):
     def __init__(self, DB_URL, db, symbol, period, winLen):
@@ -28,12 +30,12 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
         self.symbol = symbol
         self.period = period
         self.winLen = winLen
-        self.preState = stateMachine(0, 0, "blue", "black")
+        self.preState = stateMachine(0, 0, 0, "blue", "lime", "lime")
         dbCursor = self.Collection.find().sort('id', pymongo.ASCENDING).limit(self.winLen)
         self.data = list(dbCursor)
-        # first calcu
-        timeID, val, scolor, bcolor = self.calcu()
-        self.updatePreState(timeID, val, scolor, bcolor)
+        # first once
+        timeID, val, slope, scolor, bcolor, slopeColor = self.calcu()
+        self.updatePreState(timeID, val, slope, scolor, bcolor, slopeColor)
     
     def calcu(self):
         df = pd.DataFrame(self.data)
@@ -73,15 +75,29 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
                 bcolor = "red"
             else:
                 bcolor = "maroon"
-        return time[len(time)-1], val, scolor, bcolor
+
+        # check slope color
+        if slope > 0:
+            if slope > self.preState.slope:
+                slopeColor = "lime"
+            else:
+                slopeColor = "green"
+        else:
+            if  slope < self.preState.slope:
+                slopeColor = "red"
+            else:
+                slopeColor = "maroon"
+        return time[len(time)-1], val, slope, scolor, bcolor, slopeColor
     
-    def updatePreState(self, timeID, val, scolor, bcolor):
+    def updatePreState(self, timeID, val, slope, scolor, bcolor, slopeColor):
         self.preState.timeID = timeID
         self.preState.val = val
+        self.preState.slope = slope
         self.preState.scolor = scolor
         self.preState.bcolor = bcolor
+        self.preState.slopeColor = slopeColor
         
-    def Run(self):
+    def RunOnce(self):
         indicator = ""
         curID = self.preState.timeID + self.Offset
         count = self.Collection.count_documents({'id':bson.Int64(curID)})
@@ -91,13 +107,22 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
         for doc in dbCursor:
             self.data = self.data[1:]
             self.data.append(doc)
-            timeID, val, scolor, bcolor = self.calcu()
+            timeID, val, slope, scolor, bcolor, slopeColor = self.calcu()
+            # if bcolor == "green" and self.preState.bcolor == "lime":
+            #     indicator = "sell"
+            # if bcolor == "maroon" and self.preState.bcolor == "red":
+            #     indicator = "buy"
             if bcolor == "green" and self.preState.bcolor == "lime":
                 indicator = "sell"
+            if bcolor == "red" and scolor == "gray" and self.preState.scolor == "black":
+                indicator = "sell"
+
             if bcolor == "maroon" and self.preState.bcolor == "red":
                 indicator = "buy"
+            if bcolor == "lime" and scolor == "gray" and self.preState.scolor == "black":
+                indicator = "buy"
             self.close = doc["close"]
-            self.updatePreState(timeID, val, scolor, bcolor)
+            self.updatePreState(timeID, val, slope, scolor, bcolor, slopeColor)
             return True, indicator
     
     def BackTest(self):
@@ -112,9 +137,10 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
 
         newTurn = True
         while newTurn:
-            newTurn, indicator = self.Run()
-            dic ={"id":self.preState.timeID, "value":self.preState.val, "scolor":self.preState.scolor, "bcolor":self.preState.bcolor}
+            newTurn, indicator = self.RunOnce()
+            dic = {"id": self.preState.timeID, "value": self.preState.val, "scolor": self.preState.scolor, "bcolor": self.preState.bcolor, "slope": self.preState.slope, "slopeColor": self.preState.slopeColor}
             DataAll.append(dic)
+
             date = datetime.datetime.fromtimestamp(self.preState.timeID).strftime('%Y-%m-%d %H:%M:%S')
             if indicator == "sell":
                 if Amount != 0:
@@ -128,10 +154,9 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
                 if Money != 0:
                     Amount = 0.998 * Money / self.close
                     Money = 0
-                    print("%s %s Sell, close: %f, money: %f, amount: %f"%(date, self.collectionName, self.close, Money, Amount))
+                    print("%s %s buy, close: %f, money: %f, amount: %f"%(date, self.collectionName, self.close, Money, Amount))
                     buyID.append(self.preState.timeID)
                     buyData.append(self.close)
-                    
 
         if Money != 0:
             RR = (Money - 10000.0) / 10000.0
@@ -140,17 +165,17 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
         print("rate of return is: %f"%(RR))
 
         #plot
-        fig, (ax1, ax2) = plt.subplots(2,1,sharex=True,figsize=(8,12))
+        fig, (ax1, ax2, ax3) = plt.subplots(3,1,sharex=True,figsize=(8,12))
         cursor = self.Collection.find().sort('id', pymongo.ASCENDING)
         dfAll = pd.DataFrame(list(cursor))
         
         ax1.plot(dfAll["id"], dfAll["close"], color='gray', label="close")
         ax1.scatter(buyID,buyData,marker='^',c='g',edgecolors='g')
         ax1.scatter(sellID,sellData,marker='v',c='r',edgecolors='r')
-        self.Plot(DataAll, ax2)
+        self.Plot(DataAll, ax2, ax3)
         plt.show()
 
-    def Plot(self, units, ax):
+    def Plot(self, units, ax, axSlope):
         # units = []
         # dbCount = self.Collection.estimated_document_count()
         # print("%s has %d items"%(self.collectionName, dbCount))
@@ -166,6 +191,7 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
         df = pd.DataFrame(units)
         ax.bar(df["id"], df["value"], width=self.Offset*0.75, label="hist", alpha=0.2, color="gray")
 
+        # for vals
         limeVals = [dic for dic in units if dic["bcolor"] == "lime"]
         if len(limeVals)>0:
             dfLime = pd.DataFrame(limeVals)
@@ -186,6 +212,7 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
             dfMaroon = pd.DataFrame(maroonVals)
             ax.bar(dfMaroon["id"], dfMaroon["value"], width=self.Offset*0.75, label="hist", color="maroon")
 
+        # for cross
         blackCross = [dic for dic in units if dic["scolor"] == "black"]
         if len(blackCross)>0:
             dfBlack= pd.DataFrame(blackCross)
@@ -200,3 +227,24 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
         if len(blueCross) > 0:
             dfBlue = pd.DataFrame(blueCross)
             ax.scatter(dfBlue["id"], np.zeros(len(dfBlue["id"]), dtype=object), marker='+', color="blue")
+        
+        # for slope
+        limeSlopes = [dic for dic in units if dic["slopeColor"] == "lime"]
+        if len(limeSlopes)>0:
+            dfLime = pd.DataFrame(limeSlopes)
+            axSlope.bar(dfLime["id"], dfLime["slope"], width=self.Offset*0.75, label="hist", color="lime")
+
+        greenSlopes = [dic for dic in units if dic["slopeColor"] == "green"]
+        if len(greenSlopes)>0:
+            dfgreen = pd.DataFrame(greenSlopes)
+            axSlope.bar(dfgreen["id"], dfgreen["slope"], width=self.Offset*0.75, label="hist", color="green")
+
+        redSlopes = [dic for dic in units if dic["slopeColor"] == "red"]
+        if len(redSlopes)>0:
+            dfRed = pd.DataFrame(redSlopes)
+            axSlope.bar(dfRed["id"], dfRed["slope"], width=self.Offset*0.75, label="hist", color="red")
+
+        maroonSlopes = [dic for dic in units if dic["slopeColor"] == "maroon"]
+        if len(maroonSlopes)>0:
+            dfMaroon = pd.DataFrame(maroonSlopes)
+            axSlope.bar(dfMaroon["id"], dfMaroon["slope"], width=self.Offset*0.75, label="hist", color="maroon")
