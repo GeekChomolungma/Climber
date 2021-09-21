@@ -42,10 +42,10 @@ class CmUnit(strategy.baseObj.baseObjSpot):
     def initModel(self):
         f = open('out.log','a+')
         while True:
-            indicator, Bought, Sold, closePrice = self.RunOnce()
-            if indicator == "no new":
+            indicator, Bought, Sold, closePrice, lastMacd, err = self.RunOnce()
+            if err == "no new":
                 break
-            if indicator == "conn failed":
+            if err == "conn failed":
                 continue
             date = datetime.datetime.fromtimestamp(self.TimeID).strftime('%Y-%m-%d %H:%M:%S')
             if Bought == True:
@@ -61,22 +61,6 @@ class CmUnit(strategy.baseObj.baseObjSpot):
         Sold = False
         indicator,timeID,closePrice,lastMacd,lastSlowMA,stdMA = CMMACD.CmIndicator(self.data)        
         self.TimeID = timeID
-        # if indicator == "nothing" :
-        #     if self.MustBuy and not self.BPLock:
-        #         self.GMacdBP = lastMacd # optional
-        #         self.BPLock = True
-        #         self.SPLock = False
-        #         self.MustBuy = False
-        #         self.MustSell = False
-        #         Bought = True
-        #     elif self.MustSell and not self.SPLock:
-        #         self.GMacdSP = lastMacd # optional
-        #         self.SPLock = True
-        #         self.BPLock = False
-        #         self.MustSell = False
-        #         self.MustBuy = False
-        #         Sold = True
-
         if indicator == "buy":
             self.PrevBP = lastMacd
             up, down = self.GenMustSignal()
@@ -138,14 +122,14 @@ class CmUnit(strategy.baseObj.baseObjSpot):
                     self.GMacdSP = lastMacd
         return indicator, Bought, Sold, closePrice, lastMacd, lastSlowMA, stdMA
 
-    def CmCoreWithoutMustSignal(self):
+    def CmCoreOnePageWithoutMust(self):
         Bought = False
         Sold = False
-        indicator,timeID,closePrice,lastMacd,lastSlowMA,stdMA= CMMACD.CmIndicator(self.data)
-
+        indicator,timeID,closePrice,lastMacd,lastSlowMA,stdMA = CMMACD.CmIndicator(self.data)        
         self.TimeID = timeID
         if indicator == "buy":
-            if not self.BPLock and (self.GMacdSP-lastMacd)/lastSlowMA > stdMA:
+            self.PrevBP = lastMacd        
+            if not self.BPLock and (self.GMacdSP-lastMacd)/lastSlowMA > 0.954*stdMA:
                 self.BPLock = True
                 self.SPLock = False
                 self.GMacdBP = lastMacd
@@ -154,14 +138,15 @@ class CmUnit(strategy.baseObj.baseObjSpot):
                 self.GMacdBP = lastMacd
 
         if indicator == "sell":
-            if  not self.SPLock and (lastMacd-self.GMacdBP)/lastSlowMA > stdMA:
+            self.PrevSP = lastMacd
+            if not self.SPLock and (lastMacd-self.GMacdBP)/lastSlowMA > 0.954*stdMA:
                 self.SPLock = True
                 self.BPLock = False
                 self.GMacdSP = lastMacd
                 Sold = True
             elif lastMacd > self.GMacdSP:
                 self.GMacdSP = lastMacd
-        return indicator, Bought, Sold, closePrice
+        return indicator, Bought, Sold, closePrice, lastMacd, lastSlowMA, stdMA
 
     def GenMustSignal(self):
         df = pd.DataFrame(self.data)
@@ -230,9 +215,12 @@ class CmUnit(strategy.baseObj.baseObjSpot):
             print("But not enought btc, do not sell btc.")
     
     def RunOnce(self):
+        indicator = ""
+        err = "nil"
         Bought = False
         Sold = False
         closePrice = 0
+        lastMacd = 0
         f = open('out.log','a+')
         timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         # check new candle updated.
@@ -243,20 +231,20 @@ class CmUnit(strategy.baseObj.baseObjSpot):
                 outStr = "%s HB-%s check once: timeID: %d, BPLock: %r, SPLock: %r, mustBuy: %r, mustSell: %r, gMacdBP: %f, gMacdSP: %f, prevFastMA: %f, preSlowMA: %f, prevMA30: %f"\
                     %(timeNow, self.symbol, self.TimeID, self.BPLock, self.SPLock, self.MustBuy, self.MustSell, self.GMacdBP, self.GMacdSP, self.PrevFastMA, self.PreSlowMA, self.PrevMA30)
                 print(outStr, file=f)
-                return "no new", Bought, Sold, closePrice
+                return indicator, Bought, Sold, closePrice, lastMacd, "no new"
             dbCursor = self.Collection.find({"id":bson.Int64(curID)})                    
         except:
             errStr = "%s Error: HB-%s DB Connection failed"%(timeNow, self.symbol)
             print(errStr, file=f)
             f.close()
-            return "conn failed", Bought, Sold, closePrice
+            return indicator, Bought, Sold, closePrice, lastMacd, "conn failed"
         else:
             for doc in dbCursor:
                 # base level updated
-                action = "nill  "
+                action = "nil   "
                 self.data = self.data[1:]
                 self.data.append(doc)
-                indicator, Bought, Sold, closePrice, lastMacd, lastSlowMA, stdMA = self.CmCoreOnePage()
+                indicator, Bought, Sold, closePrice, lastMacd, lastSlowMA, stdMA = self.CmCoreOnePageWithoutMust()
                 if Bought == True:
                     action = "Bought"
                 if Sold == True:
@@ -265,7 +253,7 @@ class CmUnit(strategy.baseObj.baseObjSpot):
                     %(timeNow, self.collectionName, action, indicator, self.TimeID, self.BPLock, self.SPLock, self.MustBuy, self.MustSell, self.GMacdBP, self.GMacdSP, lastMacd, lastSlowMA, stdMA, self.PrevFastMA, self.PreSlowMA, self.PrevMA30)
                 print(outStr, file = f)
             f.close()
-            return indicator, Bought, Sold, closePrice
+            return indicator, Bought, Sold, closePrice, lastMacd, err
 
     def BackTest(self):
         Money = 10000.0
@@ -285,8 +273,8 @@ class CmUnit(strategy.baseObj.baseObjSpot):
         i = 0
         while True:
             i += 1 
-            indicator, Bought, Sold, cp = self.RunOnce()
-            if indicator == "no new" or indicator == "conn failed":
+            indicator, Bought, Sold, cp, lastMacd, err = self.RunOnce()
+            if err == "no new" or err == "conn failed":
                 break
             closePrice = cp
             date = datetime.datetime.fromtimestamp(self.TimeID).strftime('%Y-%m-%d %H:%M:%S')

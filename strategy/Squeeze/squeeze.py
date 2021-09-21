@@ -108,10 +108,6 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
             self.data = self.data[1:]
             self.data.append(doc)
             timeID, val, slope, scolor, bcolor, slopeColor = self.calcu()
-            # if bcolor == "green" and self.preState.bcolor == "lime":
-            #     indicator = "sell"
-            # if bcolor == "maroon" and self.preState.bcolor == "red":
-            #     indicator = "buy"
             if bcolor == "green" and self.preState.bcolor == "lime":
                 indicator = "sell"
             if bcolor == "red" and scolor == "gray" and self.preState.scolor == "black":
