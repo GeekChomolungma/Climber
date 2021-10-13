@@ -37,6 +37,16 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
         timeID, val, slope, scolor, bcolor, slopeColor = self.calcu()
         self.updatePreState(timeID, val, slope, scolor, bcolor, slopeColor)
     
+    def initModel(self):
+        f = open('out.log','a+')
+        while True:
+            existNew, indicator, timeID, val, slope, scolor, bcolor, slopeColor = self.RunOnce()
+            if existNew == False:
+                break
+            self.updatePreState(timeID, val, slope, scolor, bcolor, slopeColor)
+        print("%s squeeze initially done." %(self.collectionName), file = f)
+        f.close()
+    
     def calcu(self):
         df = pd.DataFrame(self.data)
         time = df["id"]

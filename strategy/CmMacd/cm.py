@@ -40,18 +40,13 @@ class CmUnit(strategy.baseObj.baseObjSpot):
         self.CmCoreOnePageWithoutMust()
     
     def initModel(self):
-        f = open('out.log','a+')
         while True:
-            indicator, Bought, Sold, closePrice, lastMacd, err = self.RunOnce()
+            indicator, closePrice, lastMacd, lastSlowMA, stdMA, err = self.RunOnce()
             if err == "no new":
                 break
             if err == "conn failed":
                 continue
-            date = datetime.datetime.fromtimestamp(self.TimeID).strftime('%Y-%m-%d %H:%M:%S')
-            if Bought == True:
-                print("%s %s Bought, indicator: %s, ts: %d, close: %f"%(date, self.collectionName, indicator, self.TimeID, closePrice), file = f)
-            if Sold == True:
-                print("%s %s Sold,   indicator: %s, ts: %d, close: %f"%(date, self.collectionName, indicator, self.TimeID, closePrice), file = f)
+        f = open('out.log','a+')
         print("%s initially done. BPLock: %r, SPLock: %r, mustBuy: %r, mustSell: %r, gMacdBP: %f, gMacdSP: %f, timeID: %d, prevFastMA: %f, preSlowMA: %f, prevMA30: %f" \
             %(self.collectionName, self.BPLock, self.SPLock, self.MustBuy, self.MustSell, self.GMacdBP, self.GMacdSP, self.TimeID, self.PrevFastMA, self.PreSlowMA, self.PrevMA30), file = f)
         f.close()

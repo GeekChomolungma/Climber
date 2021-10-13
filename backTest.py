@@ -49,7 +49,7 @@ print("squ4 timeid is %d"%(squ4.preState.timeID))
 while cmu.TimeID + cmu.Offset < squ4.preState.timeID + squ4.Offset:
     cmu.RunOnce()
 print("init ExpectedID of cmmacd")
-while squ.preState.timeID + squ.Offset < squ4.preState.timeID + + squ4.Offset:
+while squ.preState.timeID + squ.Offset < squ4.preState.timeID + squ4.Offset:
     newTurn, indicator, timeID, val, slope, scolor, bcolor, slopeColor = squ.RunOnce()
     squ.updatePreState(timeID, val, slope, scolor, bcolor, slopeColor)
 print("init ExpectedID of squeeze")
