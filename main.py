@@ -1,3 +1,4 @@
+from pymongo import database
 from strategy.CmMacd import cm
 from strategy.Squeeze import squeeze
 import datetime
@@ -6,21 +7,27 @@ import time
 # Replace the uri string with your MongoDB deployment's connection string.
 conn_str = "mongodb://market:admin123@139.196.155.97:27017"
 symbols = ["btcusdt"]
-
 CmUnits = []
 SquUnits = []
-cmGoals = []
-squGoals = []
+cmGoals = [0]*len(symbols)
+squGoals = [0]*len(symbols)
 for symbol in symbols:
     cmu = cm.CmUnit(conn_str, "marketinfo", symbol, "30min", 300)
-    cmu.initModel()
+    cmu.RunOnce()
     CmUnits.append(cmu)
+
     squ = squeeze.SqueezeUnit(conn_str, "marketinfo", "btcusdt", "30min", 80)
-    squ.initModel()
+    while squ.preState.timeID < cmu.TimeID:
+        newTurn, indicator, timeID, val, slope, scolor, bcolor, slopeColor = squ.RunOnce()
+        squ.updatePreState(timeID, val, slope, scolor, bcolor, slopeColor)
+    print("%s timeid cm: %d, squ: %d"%(cmu.collectionName, cmu.TimeID, squ.preState.timeID))
     SquUnits.append(squ)
 
+utcStart = time.time()
+print(utcStart)
 while True:
-    time.sleep(30.0)
+    if cmu.TimeID > utcStart:
+        time.sleep(30.0)
     for idx in range(len(symbols)):
         gGoal = 0
         cmu = CmUnits[idx]
@@ -73,16 +80,12 @@ while True:
 
         if squ.preState.timeID != cmu.TimeID:
             f = open('out.log','a+')
-            print("%s wrong time id! squ: %d, cmu: %d, cmu4: %d"%(cmu.collectionName, squ.preState.timeID, cmu.TimeID), file = f)
+            print("%s wrong time id! squ: %d, cmu: %d"%(cmu.collectionName, squ.preState.timeID, cmu.TimeID), file = f)
             f.close()
             continue
         
-        date = datetime.datetime.fromtimestamp(cmu.TimeID).strftime('%Y-%m-%d %H:%M:%S')
-        f = open('out.log','a+')
-        print("%s %s calculate once ts: %d, close: %f"%(date, cmu.collectionName, cmu.TimeID, closePrice), file = f)
-        f.close()
-        
         # calcu gGoal
+        date = datetime.datetime.fromtimestamp(cmu.TimeID).strftime('%Y-%m-%d %H:%M:%S')
         gGoal =  cmGoals[idx] + squGoals[idx]
         if gGoal >= 3:
             #buy
@@ -90,7 +93,8 @@ while True:
                 cmu.BPLock = True
                 cmu.SPLock = False
                 cmu.GMacdBP = lastMacd
-                cmu.AlarmAndAction(cmu.collectionName, cmu.symbol, cmu.period, "buy", f)
+                if cmu.TimeID > utcStart:
+                    cmu.AlarmAndAction(cmu.collectionName, cmu.symbol, cmu.period, "buy", f)
                 f = open('out.log','a+')
                 print("%s %s Bought, indicator: %s, ts: %d, close: %f"%(date, cmu.collectionName, indicator, cmu.TimeID, closePrice), file = f)
                 f.close()
@@ -99,7 +103,8 @@ while True:
                 cmu.SPLock = True
                 cmu.BPLock = False
                 cmu.GMacdSP = lastMacd
-                cmu.AlarmAndAction(cmu.collectionName, cmu.symbol, cmu.period, "sell", f)
+                if cmu.TimeID > utcStart:
+                    cmu.AlarmAndAction(cmu.collectionName, cmu.symbol, cmu.period, "sell", f)
                 f = open('out.log','a+')
                 print("%s %s Sold,   indicator: %s, ts: %d, close: %f"%(date, cmu.collectionName, indicator, cmu.TimeID, closePrice), file = f)
                 f.close()

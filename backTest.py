@@ -45,13 +45,17 @@ indicator, closePrice, lastMacd, lastSlowMA, stdMA, err = cmu4.RunOnce()
 newTurn, indicator, timeID, val, slope, scolor, bcolor, slopeColor = squ4.RunOnce()
 squ4.updatePreState(timeID, val, slope, scolor, bcolor, slopeColor)
 
-print("squ4 timeid is %d"%(squ4.preState.timeID))
-while cmu.TimeID + cmu.Offset < squ4.preState.timeID + squ4.Offset:
-    cmu.RunOnce()
-print("init ExpectedID of cmmacd")
-while squ.preState.timeID + squ.Offset < squ4.preState.timeID + squ4.Offset:
+# print("squ4 timeid is %d"%(squ4.preState.timeID))
+# while cmu.TimeID + cmu.Offset < squ4.preState.timeID + squ4.Offset:
+#     cmu.RunOnce()
+# print("init ExpectedID of cmmacd")
+# while squ.preState.timeID + squ.Offset < squ4.preState.timeID + squ4.Offset:
+#     newTurn, indicator, timeID, val, slope, scolor, bcolor, slopeColor = squ.RunOnce()
+#     squ.updatePreState(timeID, val, slope, scolor, bcolor, slopeColor)
+while squ.preState.timeID < cmu.TimeID:
     newTurn, indicator, timeID, val, slope, scolor, bcolor, slopeColor = squ.RunOnce()
     squ.updatePreState(timeID, val, slope, scolor, bcolor, slopeColor)
+print("%s timeid cm: %d, squ: %d"%(cmu.collectionName, cmu.TimeID, squ.preState.timeID))
 print("init ExpectedID of squeeze")
 
 cp = 0
