@@ -102,7 +102,7 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
         curID = self.preState.timeID + self.Offset
         count = self.Collection.count_documents({'id':bson.Int64(curID)})
         if count == 0:
-            return False, indicator
+            return False, indicator, 0, 0, 0, 0, 0, 0
         dbCursor = self.Collection.find({"id":bson.Int64(curID)})
         for doc in dbCursor:
             self.data = self.data[1:]
@@ -118,8 +118,8 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
             if bcolor == "lime" and scolor == "gray" and self.preState.scolor == "black":
                 indicator = "buy"
             self.close = doc["close"]
-            self.updatePreState(timeID, val, slope, scolor, bcolor, slopeColor)
-            return True, indicator
+            #self.updatePreState(timeID, val, slope, scolor, bcolor, slopeColor)
+            return True, indicator, timeID, val, slope, scolor, bcolor, slopeColor
     
     def BackTest(self):
         Money = 10000.0
@@ -131,9 +131,11 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
         sellData = []
         DataAll = []
 
-        newTurn = True
-        while newTurn:
-            newTurn, indicator = self.RunOnce()
+        while True:
+            newTurn, indicator, timeID, val, slope, scolor, bcolor, slopeColor = self.RunOnce()
+            if not newTurn:
+                break
+            self.updatePreState(timeID, val, slope, scolor, bcolor, slopeColor)
             dic = {"id": self.preState.timeID, "value": self.preState.val, "scolor": self.preState.scolor, "bcolor": self.preState.bcolor, "slope": self.preState.slope, "slopeColor": self.preState.slopeColor}
             DataAll.append(dic)
 
@@ -171,19 +173,7 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
         self.Plot(DataAll, ax2, ax3)
         plt.show()
 
-    def Plot(self, units, ax, axSlope):
-        # units = []
-        # dbCount = self.Collection.estimated_document_count()
-        # print("%s has %d items"%(self.collectionName, dbCount))
-        # for i in range(dbCount-self.winLen):
-        #     dbCursor = self.Collection.find().sort('id', pymongo.ASCENDING).skip(i + self.winLen).limit(1)
-        #     self.data = self.data[1:]
-        #     self.data.append(list(dbCursor)[0])
-        #     timeID, val, scolor, bcolor = self.calcu()
-        #     self.updatePreState(timeID, val, scolor, bcolor)
-        #     dic ={"id":timeID, "value":val, "scolor":scolor, "bcolor":bcolor}
-        #     units.append(dic)
-        #     print("%s, round: %d/%d"%(self.collectionName, i+self.winLen, dbCount))
+    def Plot(self, units, ax):
         df = pd.DataFrame(units)
         ax.bar(df["id"], df["value"], width=self.Offset*0.75, label="hist", alpha=0.2, color="gray")
 
@@ -223,24 +213,25 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
         if len(blueCross) > 0:
             dfBlue = pd.DataFrame(blueCross)
             ax.scatter(dfBlue["id"], np.zeros(len(dfBlue["id"]), dtype=object), marker='+', color="blue")
-        
+    
+    def PlotDerivate(self, units, ax):        
         # for slope
         limeSlopes = [dic for dic in units if dic["slopeColor"] == "lime"]
         if len(limeSlopes)>0:
             dfLime = pd.DataFrame(limeSlopes)
-            axSlope.bar(dfLime["id"], dfLime["slope"], width=self.Offset*0.75, label="hist", color="lime")
+            ax.bar(dfLime["id"], dfLime["slope"], width=self.Offset*0.75, label="hist", color="lime")
 
         greenSlopes = [dic for dic in units if dic["slopeColor"] == "green"]
         if len(greenSlopes)>0:
             dfgreen = pd.DataFrame(greenSlopes)
-            axSlope.bar(dfgreen["id"], dfgreen["slope"], width=self.Offset*0.75, label="hist", color="green")
+            ax.bar(dfgreen["id"], dfgreen["slope"], width=self.Offset*0.75, label="hist", color="green")
 
         redSlopes = [dic for dic in units if dic["slopeColor"] == "red"]
         if len(redSlopes)>0:
             dfRed = pd.DataFrame(redSlopes)
-            axSlope.bar(dfRed["id"], dfRed["slope"], width=self.Offset*0.75, label="hist", color="red")
+            ax.bar(dfRed["id"], dfRed["slope"], width=self.Offset*0.75, label="hist", color="red")
 
         maroonSlopes = [dic for dic in units if dic["slopeColor"] == "maroon"]
         if len(maroonSlopes)>0:
             dfMaroon = pd.DataFrame(maroonSlopes)
-            axSlope.bar(dfMaroon["id"], dfMaroon["slope"], width=self.Offset*0.75, label="hist", color="maroon")
+            ax.bar(dfMaroon["id"], dfMaroon["slope"], width=self.Offset*0.75, label="hist", color="maroon")

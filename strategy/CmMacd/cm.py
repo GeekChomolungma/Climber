@@ -37,7 +37,7 @@ class CmUnit(strategy.baseObj.baseObjSpot):
         self.data = list(dbCursor)
 
         # calcu once
-        self.CmCoreOnePage()
+        self.CmCoreOnePageWithoutMust()
     
     def initModel(self):
         f = open('out.log','a+')
@@ -123,30 +123,10 @@ class CmUnit(strategy.baseObj.baseObjSpot):
         return indicator, Bought, Sold, closePrice, lastMacd, lastSlowMA, stdMA
 
     def CmCoreOnePageWithoutMust(self):
-        Bought = False
-        Sold = False
-        indicator,timeID,closePrice,lastMacd,lastSlowMA,stdMA = CMMACD.CmIndicator(self.data)        
+        indicator,timeID,closePrice,lastMacd,lastSlowMA,stdMA = CMMACD.CmIndicator(self.data)
         self.TimeID = timeID
-        if indicator == "buy":
-            self.PrevBP = lastMacd        
-            if not self.BPLock and (self.GMacdSP-lastMacd)/lastSlowMA > 0.954*stdMA:
-                self.BPLock = True
-                self.SPLock = False
-                self.GMacdBP = lastMacd
-                Bought = True
-            elif lastMacd < self.GMacdBP:
-                self.GMacdBP = lastMacd
-
-        if indicator == "sell":
-            self.PrevSP = lastMacd
-            if not self.SPLock and (lastMacd-self.GMacdBP)/lastSlowMA > 0.954*stdMA:
-                self.SPLock = True
-                self.BPLock = False
-                self.GMacdSP = lastMacd
-                Sold = True
-            elif lastMacd > self.GMacdSP:
-                self.GMacdSP = lastMacd
-        return indicator, Bought, Sold, closePrice, lastMacd, lastSlowMA, stdMA
+        #self.ExpectedID = self.TimeID + self.Offset
+        return indicator, closePrice, lastMacd, lastSlowMA, stdMA
 
     def GenMustSignal(self):
         df = pd.DataFrame(self.data)
@@ -217,43 +197,66 @@ class CmUnit(strategy.baseObj.baseObjSpot):
     def RunOnce(self):
         indicator = ""
         err = "nil"
-        Bought = False
-        Sold = False
         closePrice = 0
         lastMacd = 0
-        f = open('out.log','a+')
         timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         # check new candle updated.
         try:
             curID = self.TimeID + self.Offset
             count = self.Collection.count_documents({'id':bson.Int64(curID)})
             if count == 0:
+                f = open('out.log','a+')
                 outStr = "%s HB-%s check once: timeID: %d, BPLock: %r, SPLock: %r, mustBuy: %r, mustSell: %r, gMacdBP: %f, gMacdSP: %f, prevFastMA: %f, preSlowMA: %f, prevMA30: %f"\
                     %(timeNow, self.symbol, self.TimeID, self.BPLock, self.SPLock, self.MustBuy, self.MustSell, self.GMacdBP, self.GMacdSP, self.PrevFastMA, self.PreSlowMA, self.PrevMA30)
                 print(outStr, file=f)
-                return indicator, Bought, Sold, closePrice, lastMacd, "no new"
+                f.close()
+                return indicator, closePrice, lastMacd, 0, 0, "no new"
             dbCursor = self.Collection.find({"id":bson.Int64(curID)})                    
         except:
+            f = open('out.log','a+')
             errStr = "%s Error: HB-%s DB Connection failed"%(timeNow, self.symbol)
             print(errStr, file=f)
             f.close()
-            return indicator, Bought, Sold, closePrice, lastMacd, "conn failed"
+            return indicator, closePrice, lastMacd, 0, 0, "conn failed"
         else:
             for doc in dbCursor:
-                # base level updated
-                action = "nil   "
                 self.data = self.data[1:]
                 self.data.append(doc)
-                indicator, Bought, Sold, closePrice, lastMacd, lastSlowMA, stdMA = self.CmCoreOnePageWithoutMust()
-                if Bought == True:
-                    action = "Bought"
-                if Sold == True:
-                    action = "Sold  "
-                outStr = "%s %s %s indicator: %s, timeID: %d, BPLock: %r, SPLock: %r, mustBuy: %r, mustSell: %r, gMacdBP: %f, gMacdSP: %f, lastMacd:%f, lastSlowMA:%f, stdMA:%f, prevFastMA: %f, preSlowMA: %f, prevMA30: %f" \
-                    %(timeNow, self.collectionName, action, indicator, self.TimeID, self.BPLock, self.SPLock, self.MustBuy, self.MustSell, self.GMacdBP, self.GMacdSP, lastMacd, lastSlowMA, stdMA, self.PrevFastMA, self.PreSlowMA, self.PrevMA30)
-                print(outStr, file = f)
-            f.close()
-            return indicator, Bought, Sold, closePrice, lastMacd, err
+                indicator, closePrice, lastMacd, lastSlowMA, stdMA = self.CmCoreOnePageWithoutMust()
+            return indicator, closePrice, lastMacd, lastSlowMA, stdMA, err
+
+    def Plot(self, ax1, ax2):
+        dataAll = [] 
+        DBcursorAll = self.Collection.find().sort('id', pymongo.ASCENDING)
+        for docAll in DBcursorAll:
+            dataAll.append(docAll)
+        df = pd.DataFrame(dataAll)
+        timeAll = df["id"]
+        closeAll = df["close"]
+        fastMA = builtIndicators.ma.EMA(closeAll,12)
+        slowMA = builtIndicators.ma.EMA(closeAll,26)
+        MA30All = builtIndicators.ma.EMA(closeAll,30)
+        MACD = fastMA - slowMA
+        signal = builtIndicators.ma.SMA(MACD,9)
+        hist = MACD - signal
+        fastMAAll = builtIndicators.ma.EMA(closeAll,5)
+        slowMAAll = builtIndicators.ma.EMA(closeAll,10)
+        ax1.plot(timeAll, closeAll, color='gray', label="close")
+        ax1.plot(timeAll, fastMAAll, color='y', label="MA5")
+        ax1.plot(timeAll, slowMAAll, color='g', label="MA10")
+
+        # plot cross dots between Macd and signal
+        crossIndexSell, crossIndexBuy= builtIndicators.cross.cross(MACD,signal)
+        crossTimesSell = [timeAll[ci] for ci in crossIndexSell]
+        crossSell = [signal[ci] for ci in crossIndexSell]
+        crossTimesBuy = [timeAll[ci] for ci in crossIndexBuy]
+        crossBuy = [    signal[ci] for ci in crossIndexBuy]
+        ax2.plot(timeAll, MACD, label="MACD")
+        ax2.plot(timeAll, signal, label="signal")
+        ax2.scatter(crossTimesSell,crossSell,marker='o',c='r',edgecolors='r')
+        ax2.scatter(crossTimesBuy,crossBuy,marker='o',c='g',edgecolors='g')
+        ax2.bar(timeAll,hist,width=600,label="hist")
+        
 
     def BackTest(self):
         Money = 10000.0
