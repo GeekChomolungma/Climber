@@ -93,9 +93,9 @@ while True:
                 cmu.BPLock = True
                 cmu.SPLock = False
                 cmu.GMacdBP = lastMacd
+                f = open('out.log','a+')
                 if cmu.TimeID > utcStart:
                     cmu.AlarmAndAction(cmu.collectionName, cmu.symbol, cmu.period, "buy", f)
-                f = open('out.log','a+')
                 print("%s %s Bought, indicator: %s, ts: %d, close: %f"%(date, cmu.collectionName, indicator, cmu.TimeID, closePrice), file = f)
                 f.close()
         if gGoal <= -3:
@@ -103,8 +103,8 @@ while True:
                 cmu.SPLock = True
                 cmu.BPLock = False
                 cmu.GMacdSP = lastMacd
+                f = open('out.log','a+')
                 if cmu.TimeID > utcStart:
                     cmu.AlarmAndAction(cmu.collectionName, cmu.symbol, cmu.period, "sell", f)
-                f = open('out.log','a+')
                 print("%s %s Sold,   indicator: %s, ts: %d, close: %f"%(date, cmu.collectionName, indicator, cmu.TimeID, closePrice), file = f)
                 f.close()
