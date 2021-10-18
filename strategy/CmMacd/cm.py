@@ -200,11 +200,11 @@ class CmUnit(strategy.baseObj.baseObjSpot):
             curID = self.TimeID + self.Offset
             count = self.Collection.count_documents({'id':bson.Int64(curID)})
             if count == 0:
-                f = open('out.log','a+')
-                outStr = "%s HB-%s check once: timeID: %d, BPLock: %r, SPLock: %r, mustBuy: %r, mustSell: %r, gMacdBP: %f, gMacdSP: %f, prevFastMA: %f, preSlowMA: %f, prevMA30: %f"\
-                    %(timeNow, self.symbol, self.TimeID, self.BPLock, self.SPLock, self.MustBuy, self.MustSell, self.GMacdBP, self.GMacdSP, self.PrevFastMA, self.PreSlowMA, self.PrevMA30)
-                print(outStr, file=f)
-                f.close()
+                # f = open('out.log','a+')
+                # outStr = "%s HB-%s check once: timeID: %d, BPLock: %r, SPLock: %r, mustBuy: %r, mustSell: %r, gMacdBP: %f, gMacdSP: %f, prevFastMA: %f, preSlowMA: %f, prevMA30: %f"\
+                #     %(timeNow, self.symbol, self.TimeID, self.BPLock, self.SPLock, self.MustBuy, self.MustSell, self.GMacdBP, self.GMacdSP, self.PrevFastMA, self.PreSlowMA, self.PrevMA30)
+                # print(outStr, file=f)
+                # f.close()
                 return indicator, closePrice, lastMacd, 0, 0, "no new"
             dbCursor = self.Collection.find({"id":bson.Int64(curID)})                    
         except:

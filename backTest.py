@@ -12,7 +12,7 @@ import pandas as pd
 conn_str = "mongodb://market:admin123@139.196.155.97:27017"
 symbols = "btcusdt"
 cmu = cm.CmUnit(conn_str, "marketinfo", "btcusdt", "30min", 300)
-cmu4 = cm.CmUnit(conn_str, "marketinfo", "btcusdt", "4hour", 100)
+cmu4 = cm.CmUnit(conn_str, "marketinfo", "btcusdt", "4hour", 75)
 squ = squeeze.SqueezeUnit(conn_str, "marketinfo", "btcusdt", "30min", 80)
 squ4 = squeeze.SqueezeUnit(conn_str, "marketinfo", "btcusdt", "4hour", 80)
 BaseCount = cmu.Collection.count_documents({})

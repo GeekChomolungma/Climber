@@ -8,6 +8,7 @@ import time
 conn_str = "mongodb://market:admin123@139.196.155.97:27017"
 symbols = ["btcusdt"]
 CmUnits = []
+Cm4Units = []
 SquUnits = []
 cmGoals = [0]*len(symbols)
 squGoals = [0]*len(symbols)
@@ -15,6 +16,10 @@ for symbol in symbols:
     cmu = cm.CmUnit(conn_str, "marketinfo", symbol, "30min", 300)
     cmu.RunOnce()
     CmUnits.append(cmu)
+
+    cmu4 = cm.CmUnit(conn_str, "marketinfo", "btcusdt", "4hour", 75)
+    cmu4.RunOnce()
+    Cm4Units.append(cmu4)
 
     squ = squeeze.SqueezeUnit(conn_str, "marketinfo", "btcusdt", "30min", 80)
     while squ.preState.timeID < cmu.TimeID:
@@ -26,11 +31,12 @@ for symbol in symbols:
 utcStart = time.time()
 print(utcStart)
 while True:
-    if cmu.TimeID > utcStart:
+    if cmu.TimeID > (utcStart - 3600):
         time.sleep(30.0)
     for idx in range(len(symbols)):
         gGoal = 0
         cmu = CmUnits[idx]
+        cmu4 = Cm4Units[idx]
         squ = SquUnits[idx]
         
         # cmmacd
@@ -54,8 +60,24 @@ while True:
             if (lastMacd-cmu.GMacdBP)/lastSlowMA > 0.954*stdMA:
                 cmGoals[idx] = -2
 
+        # cmmacd high level
+        if cmu.TimeID + cmu.Offset == cmu4.TimeID + 2*cmu4.Offset:
+            indicatorH, closePriceH, lastMacd, lastSlowMA, stdMA, err = cmu4.RunOnce()
+            if err == "no new":
+                timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                f = open('out.log','a+')
+                outStr = "%s HB-%s hight level cmacd no new data found"%(timeNow, cmu4.symbol)
+                print(outStr, file=f)
+                f.close()
+            if err == "conn failed":
+                timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                f = open('out.log','a+')
+                outStr = "%s HB-%s hight level cmacd conn failed!"%(timeNow, cmu4.symbol)
+                print(outStr, file=f)
+                f.close()    
+        
         # squeeze
-        newTurn, indicator, timeID, val, slope, scolor, bcolor, slopeColor = squ.RunOnce()
+        newTurn, indicatorS, timeID, val, slope, scolor, bcolor, slopeColor = squ.RunOnce()
         colorChange = False
         if not newTurn:
             continue
@@ -87,6 +109,9 @@ while True:
         # calcu gGoal
         date = datetime.datetime.fromtimestamp(cmu.TimeID).strftime('%Y-%m-%d %H:%M:%S')
         gGoal =  cmGoals[idx] + squGoals[idx]
+        f = open('out.log','a+')
+        print("%s %s timeID: %d, BPLock: %r, SPLock: %r, gGoal: %d, cmGoal: %f, squGoal: %f"%(date, cmu.collectionName, cmu.TimeID, cmu.BPLock, cmu.SPLock, gGoal, cmGoals[idx], squGoals[idx]), file = f)
+        f.close()
         if gGoal >= 3:
             #buy
             if not cmu.BPLock:
