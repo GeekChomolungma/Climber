@@ -9,7 +9,7 @@ import pymongo
 import pandas as pd
 
 # Replace the uri string with your MongoDB deployment's connection string.
-conn_str = "mongodb://market:admin123@139.196.155.97:27017"
+conn_str = "mongodb://market:admin123@65.52.174.232:27017"
 symbols = "btcusdt"
 cmu = cm.CmUnit(conn_str, "marketinfo", "btcusdt", "30min", 300)
 cmu4 = cm.CmUnit(conn_str, "marketinfo", "btcusdt", "4hour", 75)
@@ -128,45 +128,45 @@ while True:
         if (lastMacd-cmu.GMacdBP)/lastSlowMA > 0.954*stdMA:
             cmGoal = -2
 
-    # cmmacd high level
-    if cmu.TimeID + cmu.Offset == cmu4.TimeID + 2*cmu4.Offset:
-        indicator, closePriceH, lastMacd, lastSlowMA, stdMA, err = cmu4.RunOnce()
-        if indicator == "buy":
-            cmGoal4 = 2
-            timeBPHigh.append(cmu4.TimeID)
-            dataBPHigh.append(closePriceH)
-        if indicator == "sell":
-            cmGoal4 = -2
-            timeSPHigh.append(cmu4.TimeID)
-            dataSPHigh.append(closePriceH)
+    # # cmmacd high level
+    # if cmu.TimeID + cmu.Offset == cmu4.TimeID + 2*cmu4.Offset:
+    #     indicator, closePriceH, lastMacd, lastSlowMA, stdMA, err = cmu4.RunOnce()
+    #     if indicator == "buy":
+    #         cmGoal4 = 2
+    #         timeBPHigh.append(cmu4.TimeID)
+    #         dataBPHigh.append(closePriceH)
+    #     if indicator == "sell":
+    #         cmGoal4 = -2
+    #         timeSPHigh.append(cmu4.TimeID)
+    #         dataSPHigh.append(closePriceH)
     
-    # squ high level
-    if cmu.TimeID + cmu.Offset == squ4.preState.timeID + 2*squ4.Offset:
-        # squeeze
-        newTurn, indicator, timeID, val, slope, scolor, bcolor, slopeColor = squ4.RunOnce()
-        colorChange = False
-        if not newTurn:
-            break
-        if scolor == "gray":
-            if bcolor == "lime" and squ4.preState.scolor == "black":
-                # up
-                squGoal4 = 1
-            if slopeColor == "maroon" and squ4.preState.slopeColor == "red":
-                squGoal4 = 0.5
+    # # squ high level
+    # if cmu.TimeID + cmu.Offset == squ4.preState.timeID + 2*squ4.Offset:
+    #     # squeeze
+    #     newTurn, indicator, timeID, val, slope, scolor, bcolor, slopeColor = squ4.RunOnce()
+    #     colorChange = False
+    #     if not newTurn:
+    #         break
+    #     if scolor == "gray":
+    #         if bcolor == "lime" and squ4.preState.scolor == "black":
+    #             # up
+    #             squGoal4 = 1
+    #         if slopeColor == "maroon" and squ4.preState.slopeColor == "red":
+    #             squGoal4 = 0.5
 
-            if bcolor == "red" and squ4.preState.scolor == "black":
-                # down
-                squGoal4 = -1
-            if slopeColor == "green" and squ4.preState.slopeColor == "lime":
-                squGoal4 = -0.5
-        else:
-            if squGoal4 > 0 and (bcolor == "red" or bcolor == "maroon"):
-                squGoal4 = 0
-            if squGoal4 < 0 and (bcolor == "lime" or bcolor == "green"):
-                squGoal4 = 0
-        dic = {"id": timeID, "value": val, "scolor": scolor, "bcolor": bcolor, "slope": slope, "slopeColor": slopeColor}
-        squData4.append(dic)
-        squ4.updatePreState(timeID, val, slope, scolor, bcolor, slopeColor)
+    #         if bcolor == "red" and squ4.preState.scolor == "black":
+    #             # down
+    #             squGoal4 = -1
+    #         if slopeColor == "green" and squ4.preState.slopeColor == "lime":
+    #             squGoal4 = -0.5
+    #     else:
+    #         if squGoal4 > 0 and (bcolor == "red" or bcolor == "maroon"):
+    #             squGoal4 = 0
+    #         if squGoal4 < 0 and (bcolor == "lime" or bcolor == "green"):
+    #             squGoal4 = 0
+    #     dic = {"id": timeID, "value": val, "scolor": scolor, "bcolor": bcolor, "slope": slope, "slopeColor": slopeColor}
+    #     squData4.append(dic)
+    #     squ4.updatePreState(timeID, val, slope, scolor, bcolor, slopeColor)
 
 
     goalTime.append(cmu.TimeID)
@@ -185,7 +185,7 @@ while True:
             dataBP.append(closePrice)
             print("%s, HB-%s-%s, Bought, indicator: %s, ts: %d, close: %f, amount: %f, round: %d/%d" \
                 %(date, cmu.symbol, cmu.period, indicator, cmu.TimeID, closePrice, Amount, i+cmu.winLen, BaseCount))
-    if gGoal <= -3:
+    if gGoal <= -2:
         if not cmu.SPLock:
             cmu.SPLock = True
             cmu.BPLock = False
@@ -210,11 +210,11 @@ ax1.scatter(timeBP,dataBP,marker='o',c='w',edgecolors='g')
 ax1.scatter(timeSP,dataSP,marker='o',c='m',edgecolors='m')
 squ.Plot(squData, ax3)
 
-cmu4.Plot(ax4,ax5)
-ax4.scatter(timeBPHigh,dataBPHigh,marker='o',c='w',edgecolors='g')
-ax4.scatter(timeSPHigh,dataSPHigh,marker='o',c='m',edgecolors='m')
-squ4.Plot(squData4, ax6)
-squ4.PlotDerivate(squData4, ax7)
+# cmu4.Plot(ax4,ax5)
+# ax4.scatter(timeBPHigh,dataBPHigh,marker='o',c='w',edgecolors='g')
+# ax4.scatter(timeSPHigh,dataSPHigh,marker='o',c='m',edgecolors='m')
+# squ4.Plot(squData4, ax6)
+# squ4.PlotDerivate(squData4, ax7)
 
 ax8.plot(goalTime, goals, label="goals")
 plt.show()

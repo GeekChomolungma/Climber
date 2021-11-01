@@ -1,10 +1,10 @@
 import requests
 import json
 
-urlAccountBalance = 'http://139.196.155.97:8080/api/v1/account/accountbalance'
-urlPlaceOrder = 'http://139.196.155.97:8080/api/v1/order/placeorder'
-urlCancelOrder = 'http://139.196.155.97:8080/api/v1/order/cancelorder'
-urlGetOrder = 'http://139.196.155.97:8080/api/v1/order/getorder'
+urlAccountBalance = 'http://65.52.174.232:8080/api/v1/account/accountbalance'
+urlPlaceOrder = 'http://65.52.174.232:8080/api/v1/order/placeorder'
+urlCancelOrder = 'http://65.52.174.232:8080/api/v1/order/cancelorder'
+urlGetOrder = 'http://65.52.174.232:8080/api/v1/order/getorder'
 
 def PlaceOrder(symbol, model, amout, price, source):
     dict = {

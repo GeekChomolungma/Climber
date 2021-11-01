@@ -7,7 +7,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # Replace the uri string with your MongoDB deployment's connection string.
-conn_str = "mongodb://market:admin123@139.196.155.97:27017"
+conn_str = "mongodb://market:admin123@65.52.174.232:27017"
 bo = strategy.baseObj.baseObjSpot(conn_str)
 bo.LoadDB("marketinfo","HB-btcusdt-30min")
 data = []
