@@ -109,27 +109,36 @@ class SqueezeUnit(strategy.baseObj.baseObjSpot):
         
     def RunOnce(self):
         indicator = ""
-        curID = self.preState.timeID + self.Offset
-        count = self.Collection.count_documents({'id':bson.Int64(curID)})
-        if count == 0:
-            return False, indicator, 0, 0, 0, 0, 0, 0
-        dbCursor = self.Collection.find({"id":bson.Int64(curID)})
-        for doc in dbCursor:
-            self.data = self.data[1:]
-            self.data.append(doc)
-            timeID, val, slope, scolor, bcolor, slopeColor = self.calcu()
-            if bcolor == "green" and self.preState.bcolor == "lime":
-                indicator = "sell"
-            if bcolor == "red" and scolor == "gray" and self.preState.scolor == "black":
-                indicator = "sell"
+        timeNow = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        try:
+            curID = self.preState.timeID + self.Offset
+            count = self.Collection.count_documents({'id':bson.Int64(curID)})
+            if count == 0:
+                return False, indicator, 0, 0, 0, 0, 0, 0
+            dbCursor = self.Collection.find({"id":bson.Int64(curID)})
+        except:
+            f = open('out.log','a+')
+            errStr = "%s Error: HB-%s DB Connection failed"%(timeNow, self.symbol)
+            print(errStr, file=f)
+            f.close()
+            return False, 0, 0, 0, 0, 0, 0, 0
+        else:
+            for doc in dbCursor:
+                self.data = self.data[1:]
+                self.data.append(doc)
+                timeID, val, slope, scolor, bcolor, slopeColor = self.calcu()
+                if bcolor == "green" and self.preState.bcolor == "lime":
+                    indicator = "sell"
+                if bcolor == "red" and scolor == "gray" and self.preState.scolor == "black":
+                    indicator = "sell"
 
-            if bcolor == "maroon" and self.preState.bcolor == "red":
-                indicator = "buy"
-            if bcolor == "lime" and scolor == "gray" and self.preState.scolor == "black":
-                indicator = "buy"
-            self.close = doc["close"]
-            #self.updatePreState(timeID, val, slope, scolor, bcolor, slopeColor)
-            return True, indicator, timeID, val, slope, scolor, bcolor, slopeColor
+                if bcolor == "maroon" and self.preState.bcolor == "red":
+                    indicator = "buy"
+                if bcolor == "lime" and scolor == "gray" and self.preState.scolor == "black":
+                    indicator = "buy"
+                self.close = doc["close"]
+                #self.updatePreState(timeID, val, slope, scolor, bcolor, slopeColor)
+                return True, indicator, timeID, val, slope, scolor, bcolor, slopeColor
     
     def BackTest(self):
         Money = 10000.0
